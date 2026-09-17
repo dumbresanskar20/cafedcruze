@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, Contact, Phone, ArrowRight, KeyRound, AlertCircle, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Capacitor } from '@capacitor/core';
-import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { useAuth } from '../context/AuthContext';
 import CAFE_D_CRUZE_LOGO from '../assets/logo';
 
@@ -28,7 +26,6 @@ const isWebViewOrApp = () => {
     (ua.includes('android') && ua.includes('version/')) ||
     ua.includes('mobile_app') ||
     window.Android !== undefined ||
-    window.Capacitor !== undefined ||
     window.ReactNativeWebView !== undefined ||
     (window.webkit && window.webkit.messageHandlers !== undefined)
   );
@@ -94,32 +91,7 @@ export default function AuthModal() {
     resetFormAlerts();
     setGoogleLoading(true);
 
-    // Native Android/iOS Capacitor App Flow
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const googleUser = await GoogleAuth.signIn();
-        const accessToken = googleUser?.authentication?.accessToken || googleUser?.accessToken;
-
-        if (accessToken) {
-          const res = await loginWithGoogle(null, accessToken);
-          if (res.success) {
-            setSuccessMsg(res.message || (mode === 'signup' ? 'Account created with Google successfully!' : 'Signed in with Google successfully!'));
-          } else {
-            setErrorMsg(res.message || 'Google authentication failed.');
-          }
-        } else {
-          setErrorMsg('No access token received from Google.');
-        }
-      } catch (err) {
-        console.warn('Native Google Sign-In Error / Cancelled:', err);
-        setErrorMsg('Google Sign-In was cancelled or failed. Please try again.');
-      } finally {
-        setGoogleLoading(false);
-      }
-      return;
-    }
-
-    // Web Browser Flow (Completely Unchanged)
+    // Web Browser Flow
     if (isWebViewOrApp()) {
       // In WebView APKs, window.open popups fail without multi-window handling.
       // We navigate directly to the Google OAuth 2.0 authorization URL:

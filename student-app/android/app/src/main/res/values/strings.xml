@@ -1,8 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Cafe D Cruze Restaurant</string>
-    <string name="title_activity_main">Cafe D Cruze Restaurant</string>
-    <string name="package_name">com.dypcoei.mealbook</string>
-    <string name="custom_url_scheme">com.dypcoei.mealbook</string>
-    <string name="server_client_id">404710338094-d5cganqkkrjn1bkptmnju0m2dmdvs5ss.apps.googleusercontent.com</string>
-</resources>

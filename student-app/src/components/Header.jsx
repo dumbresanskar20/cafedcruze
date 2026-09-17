@@ -3,7 +3,6 @@ import { ShoppingBag, User, LogOut, Receipt, ChevronDown, KeyRound } from 'lucid
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import CAFE_D_CRUZE_LOGO from '../assets/logo';
-import DownloadAppButton from './DownloadAppButton';
 
 export default function Header({ onOpenOrders }) {
   const { student, isAuthenticated, openAuthModal, logout } = useAuth();
@@ -50,9 +49,6 @@ export default function Header({ onOpenOrders }) {
           {/* Right Action Bar: Cart Icon & Persistent Auth Control */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             
-            {/* Download Android App Button (Conditionally visible ONLY on Android Web Browsers) */}
-            <DownloadAppButton />
-
             {/* Cart Tray Trigger */}
             <button
               onClick={() => setIsCartOpen(true)}
