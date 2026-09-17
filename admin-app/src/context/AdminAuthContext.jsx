@@ -91,9 +91,30 @@ export const AdminAuthProvider = ({ children }) => {
 
       setAdmin(data.admin);
       setToken(data.token);
-      return { success: true, message: data.message };
+
+      if (data.subscription) {
+        setSubscription(data.subscription);
+      }
+      if (data.subscription_expired) {
+        setSubscriptionExpired(true);
+      }
+
+      return { success: true, message: data.message, subscriptionExpired: Boolean(data.subscription_expired) };
     } catch (error) {
       const msg = error.response?.data?.message || 'Login failed. Invalid admin credentials.';
+      return { success: false, message: msg };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const register = async (username, email, password, confirmPassword, role = 'admin') => {
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/admin/register', { username, email, password, confirmPassword, role });
+      return { success: true, message: res.data.message };
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Registration failed.';
       return { success: false, message: msg };
     } finally {
       setLoading(false);
@@ -159,6 +180,7 @@ export const AdminAuthProvider = ({ children }) => {
         setSubscriptionExpired,
         fetchSubscriptionStatus,
         login,
+        register,
         setPasswordWithToken,
         logout,
       }}

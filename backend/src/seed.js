@@ -1,43 +1,61 @@
-const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
 const dotenv = require('dotenv');
-const prisma = require('./database/prisma');
 
-dotenv.config();
+// Locate .env path relative to __dirname
+let envPath = path.resolve(__dirname, '../.env'); // local dev (backend/.env relative to backend/src/seed.js)
+
+// Check if cPanel deployment structure is active (backend/.env is inside backend/ subfolder)
+const cpanelEnvPath = path.resolve(__dirname, '../backend/.env');
+if (fs.existsSync(cpanelEnvPath)) {
+  envPath = cpanelEnvPath;
+} else if (fs.existsSync(path.resolve(__dirname, './.env'))) {
+  envPath = path.resolve(__dirname, './.env');
+} else if (fs.existsSync(path.resolve(__dirname, '../../backend/.env'))) {
+  envPath = path.resolve(__dirname, '../../backend/.env');
+}
+
+dotenv.config({ path: envPath });
+
+const bcrypt = require('bcryptjs');
+const { pool } = require('./database/db');
 
 const seedData = async () => {
   try {
-    console.log('[Seed] Connecting to MySQL via Prisma...');
-    await prisma.$connect();
+    console.log('[Seed] Connecting to MySQL...');
 
     // 1. Seed Super Admin
-    const existingAdmin = await prisma.adminUser.findUnique({ where: { email: 'admin@mess.com' } });
+    const [adminRows] = await pool.execute('SELECT * FROM AdminUser WHERE email = ? LIMIT 1', ['admin@mess.com']);
+    const existingAdmin = adminRows[0] || null;
     if (!existingAdmin) {
       const passwordHash = await bcrypt.hash('Admin@123', 10);
-      await prisma.adminUser.create({
-        data: {
-          username: 'superadmin',
-          email: 'admin@mess.com',
-          password_hash: passwordHash,
-          role: 'super_admin',
-          is_active: true,
-          is_verified: true,
-        },
-      });
+      await pool.execute(
+        `INSERT INTO AdminUser (username, email, password_hash, role, is_active, is_verified)
+         VALUES (?, ?, ?, ?, 1, 1)`,
+        ['superadmin', 'admin@mess.com', passwordHash, 'super_admin']
+      );
       console.log('✅ Super Admin created: admin@mess.com / Admin@123');
     } else {
       console.log('ℹ️ Super Admin already exists.');
     }
 
     // 2. Seed Meal Windows
-    const existingWindowsCount = await prisma.mealWindow.count();
+    const [windowCountResult] = await pool.query('SELECT COUNT(*) AS count FROM MealWindow');
+    const existingWindowsCount = windowCountResult[0].count;
     if (existingWindowsCount === 0) {
       const mealWindows = [
-        { meal_type: 'breakfast', start_time: '07:30', end_time: '10:00', is_active: true, is_full_day: false },
-        { meal_type: 'lunch', start_time: '12:00', end_time: '14:30', is_active: true, is_full_day: false },
-        { meal_type: 'snacks', start_time: '16:30', end_time: '18:00', is_active: true, is_full_day: false },
-        { meal_type: 'dinner', start_time: '19:30', end_time: '21:30', is_active: true, is_full_day: false },
+        { meal_type: 'breakfast', start_time: '07:30', serving_start_time: '08:30', end_time: '10:00', is_active: true, is_full_day: false },
+        { meal_type: 'lunch', start_time: '12:00', serving_start_time: '12:30', end_time: '14:30', is_active: true, is_full_day: false },
+        { meal_type: 'snacks', start_time: '16:30', serving_start_time: '16:30', end_time: '18:00', is_active: true, is_full_day: false },
+        { meal_type: 'dinner', start_time: '19:30', serving_start_time: '19:30', end_time: '21:30', is_active: true, is_full_day: false },
       ];
-      await prisma.mealWindow.createMany({ data: mealWindows });
+      for (const w of mealWindows) {
+        await pool.execute(
+          `INSERT INTO MealWindow (meal_type, start_time, serving_start_time, end_time, is_active, is_full_day)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [w.meal_type, w.start_time, w.serving_start_time, w.end_time, w.is_active ? 1 : 0, w.is_full_day ? 1 : 0]
+        );
+      }
       console.log('✅ Default Meal Windows created (Breakfast, Lunch, Snacks, Dinner).');
     } else {
       console.log('ℹ️ Meal Windows already exist — preserving database settings.');
@@ -166,46 +184,51 @@ const seedData = async () => {
       },
     ];
 
-    await prisma.menuItem.deleteMany({});
-    await prisma.menuItem.createMany({ data: sampleItems });
+    // Delete existing menu items (cascade will delete recipe items)
+    await pool.query('DELETE FROM MenuItem');
+    
+    // Seed new menu items
+    for (const item of sampleItems) {
+      await pool.execute(
+        `INSERT INTO MenuItem (name, meal_type, price, image_url, description, is_active)
+         VALUES (?, ?, ?, ?, ?, 1)`,
+        [item.name, item.meal_type, item.price, item.image_url, item.description]
+      );
+    }
     console.log(`✅ Seeded ${sampleItems.length} menu items successfully.`);
 
     // 4. Seed Test Student Account
-    const existingStudent = await prisma.student.findUnique({ where: { email: 'student@test.com' } });
+    const [studentRows] = await pool.execute('SELECT * FROM Student WHERE email = ? LIMIT 1', ['student@test.com']);
+    const existingStudent = studentRows[0] || null;
     if (!existingStudent) {
       const studentPassHash = await bcrypt.hash('Student@123', 10);
-      await prisma.student.create({
-        data: {
-          name: 'Sanskar Dumbre',
-          email: 'student@test.com',
-          roll_no: '2026-CS-042',
-          password_hash: studentPassHash,
-          is_verified: true,
-        },
-      });
+      await pool.execute(
+        `INSERT INTO Student (name, email, roll_no, password_hash, is_verified, is_active)
+         VALUES (?, ?, ?, ?, 1, 1)`,
+        ['Sanskar Dumbre', 'student@test.com', '2026-CS-042', studentPassHash]
+      );
       console.log('✅ Test Student created: student@test.com / Student@123 (Verified)');
     }
 
     // 5. Seed Test Developer Account
-    const existingDeveloper = await prisma.developer.findFirst({ where: { email: 'developer@mess.com' } });
+    const [devRows] = await pool.execute('SELECT * FROM Developer WHERE email = ? LIMIT 1', ['developer@mess.com']);
+    const existingDeveloper = devRows[0] || null;
     if (!existingDeveloper) {
       const devPassHash = await bcrypt.hash('Developer@123', 10);
-      await prisma.developer.create({
-        data: {
-          name: 'Super Developer',
-          email: 'developer@mess.com',
-          password_hash: devPassHash,
-        },
-      });
+      await pool.execute(
+        `INSERT INTO Developer (name, email, password_hash)
+         VALUES (?, ?, ?)`,
+        ['Super Developer', 'developer@mess.com', devPassHash]
+      );
       console.log('✅ Test Developer created: developer@mess.com / Developer@123');
     }
 
     console.log('\n🎉 Seeding completed successfully!');
-    await prisma.$disconnect();
+    await pool.end();
     process.exit(0);
   } catch (error) {
     console.error('❌ Seeding error:', error);
-    await prisma.$disconnect();
+    await pool.end();
     process.exit(1);
   }
 };

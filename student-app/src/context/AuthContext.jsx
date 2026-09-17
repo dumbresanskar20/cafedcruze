@@ -32,6 +32,43 @@ export const AuthProvider = ({ children }) => {
     }
   }, [student]);
 
+  // Capture Google OAuth redirect token from URL hash or query params (#access_token=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const parseAndLoginFromHash = async () => {
+      const hash = window.location.hash;
+      const search = window.location.search;
+
+      let accessToken = null;
+      let idToken = null;
+
+      if (hash && (hash.includes('access_token=') || hash.includes('id_token='))) {
+        const hashParams = new URLSearchParams(hash.substring(1));
+        accessToken = hashParams.get('access_token');
+        idToken = hashParams.get('id_token');
+      } else if (search && (search.includes('access_token=') || search.includes('id_token='))) {
+        const searchParams = new URLSearchParams(search);
+        accessToken = searchParams.get('access_token');
+        idToken = searchParams.get('id_token');
+      }
+
+      if (accessToken || idToken) {
+        // Clean URL hash without reloading the page
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+
+        try {
+          await loginWithGoogle(idToken || null, accessToken || null);
+        } catch (e) {
+          console.error('[OAuth Redirect] Auto-login error:', e);
+        }
+      }
+    };
+
+    parseAndLoginFromHash();
+  }, []);
+
   // Handle successful login or OTP verification
   const handleAuthSuccess = (userData, accessToken) => {
     setStudent(userData);
@@ -152,6 +189,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithGoogle = async (credential, accessToken) => {
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/student/google', { credential, accessToken });
+      const data = response.data;
+      handleAuthSuccess(data.student, data.accessToken);
+      return { success: true, message: data.message };
+    } catch (error) {
+      const msg = error.response?.data?.message || error.message || 'Google sign-in failed. Please try again.';
+      return { success: false, message: msg };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     setStudent(null);
     setToken(null);
@@ -185,6 +237,7 @@ export const AuthProvider = ({ children }) => {
         pendingCheckout,
         loading,
         login,
+        loginWithGoogle,
         signup,
         verifyOtp,
         resendOtp,

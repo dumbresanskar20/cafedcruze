@@ -1,0 +1,49 @@
+# ----------------------------------------------------------------------
+# 1. MIME Types & Encoding for Android APK Files
+# ----------------------------------------------------------------------
+# Disable mod_deflate / gzip compression for .apk files.
+# Compressing an APK (which is already a compressed zip structure) causes Android
+# browsers to decompress it and rename the file extension to .zip!
+<IfModule mod_deflate.c>
+  SetEnvIfNoCase Request_URI \.apk$ no-gzip dont-vary
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType text/javascript .js
+  AddType text/css .css
+  AddType application/vnd.android.package-archive .apk
+</IfModule>
+
+# Force MIME type and headers for APK files to prevent Android browser from renaming to .zip
+<FilesMatch "\.apk$">
+  ForceType application/vnd.android.package-archive
+  <IfModule mod_headers.c>
+    Header set Content-Type "application/vnd.android.package-archive"
+    Header set Content-Disposition "attachment; filename=\"DYPCOEI-Canteen.apk\""
+    Header set X-Content-Type-Options "nosniff"
+    Header set Cache-Control "public, max-age=3600"
+  </IfModule>
+</FilesMatch>
+
+# ----------------------------------------------------------------------
+# 2. Force correct MIME types for Javascript and CSS
+# ----------------------------------------------------------------------
+<FilesMatch "\.js$">
+  ForceType text/javascript
+</FilesMatch>
+<FilesMatch "\.css$">
+  ForceType text/css
+</FilesMatch>
+
+# ----------------------------------------------------------------------
+# 3. SPA Frontend Rewrite Rules
+# ----------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_FILENAME} !-l
+  RewriteRule . /index.html [L]
+</IfModule>

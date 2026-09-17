@@ -1,11 +1,10 @@
 import axios from 'axios';
 
-const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 const envApiUrl = import.meta.env.VITE_API_URL;
 
-const rawApiUrl = isLocalhost
-  ? (envApiUrl && (envApiUrl.includes('localhost') || envApiUrl.includes('127.0.0.1')) ? envApiUrl : 'http://localhost:5000/api')
-  : (envApiUrl && !envApiUrl.includes('localhost') && !envApiUrl.includes('127.0.0.1') ? envApiUrl : 'https://messmgmt-1.onrender.com/api');
+const rawApiUrl = envApiUrl
+  ? envApiUrl
+  : 'https://cafe-d-cruze-api.mealbook.in/api';
 
 const cleanApiUrl = rawApiUrl.replace(/\/+$/, '');
 const API_BASE_URL = cleanApiUrl.endsWith('/api') ? cleanApiUrl : `${cleanApiUrl}/api`;

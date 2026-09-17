@@ -1,59 +1,71 @@
 const cron = require('node-cron');
-const prisma = require('../database/prisma');
+const { pool } = require('../database/db');
 
 /**
- * Permanently delete orders older than the specified retention window (default: 60 days).
- * OrderItem rows are automatically cascade-deleted via the onDelete: Cascade FK on OrderItem.order_id.
+ * Auto-expire uncollected token orders from previous days.
+ * If an order was placed/preparing/ready on a date before TODAY and was never
+ * collected/delivered at the canteen counter, its status transitions to 'expired'.
  *
- * @returns {Promise<{ deletedCount: number, cutoffDate: Date, retentionDays: number }>}
+ * @returns {Promise<number>} Number of orders updated to expired
  */
-const cleanupOldOrders = async () => {
-  const retentionDays = parseInt(process.env.ORDER_RETENTION_DAYS, 10) || 60;
-  const now = new Date();
-  const cutoffDate = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
-
+const autoExpireUncollectedOrders = async () => {
   try {
-    const result = await prisma.order.deleteMany({
-      where: {
-        created_at: { lt: cutoffDate },
-      },
-    });
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    const deletedCount = result.count || 0;
-    const logTimestamp = now.toISOString();
+    const [result] = await pool.execute(
+      `UPDATE \`Order\` 
+       SET order_status = 'expired' 
+       WHERE date < ? 
+         AND order_status IN ('placed', 'preparing', 'ready')`,
+      [todayStr]
+    );
 
-    if (deletedCount > 0) {
-      console.log(
-        `🧹 [Order Cleanup Job] Successfully deleted ${deletedCount} expired order(s) older than ${retentionDays} days (Cutoff: ${cutoffDate.toISOString()}) on ${logTimestamp}`
-      );
-    } else {
-      console.log(
-        `🧹 [Order Cleanup Job] Zero expired orders found older than ${retentionDays} days (Cutoff: ${cutoffDate.toISOString()}) on ${logTimestamp}`
-      );
+    const count = result.affectedRows || 0;
+    if (count > 0) {
+      console.log(`⏰ [Auto-Expire] Automatically expired ${count} uncollected order(s) from previous days (before ${todayStr}).`);
     }
-
-    return { deletedCount, cutoffDate, retentionDays, timestamp: logTimestamp };
+    return count;
   } catch (error) {
-    console.error(`❌ [Order Cleanup Job Error] Failed to execute cleanup job: ${error.message}`);
-    return { error: error.message, deletedCount: 0 };
+    console.error('❌ [Auto-Expire Error]:', error.message);
+    return 0;
   }
 };
 
 /**
- * Initialize daily scheduled cron job (runs every day at 02:00 AM server time)
+ * Permanently delete orders older than the specified retention window.
+ * DISABLED: Orders are NEVER automatically deleted from the database.
+ * All orders persist permanently for audit and lifetime canteen reporting.
+ *
+ * @returns {Promise<{ deletedCount: number, message: string }>}
+ */
+const cleanupOldOrders = async () => {
+  console.log('ℹ️ [Order Cleanup Job] Automated order deletion is disabled. All orders persist permanently in the database.');
+  return { deletedCount: 0, message: 'Automated deletion disabled; orders persist permanently.' };
+};
+
+/**
+ * Initialize daily scheduled cron job.
+ * Automatically transitions uncollected token orders from previous days to 'expired'.
+ * Automated order deletion is permanently disabled.
  */
 const initOrderCleanupJob = () => {
-  const schedulePattern = process.env.ORDER_CLEANUP_CRON || '0 2 * * *';
+  const schedulePattern = process.env.ORDER_CLEANUP_CRON || '1 0 * * *';
 
   cron.schedule(schedulePattern, async () => {
-    console.log('[Order Cleanup Job] Scheduled daily trigger started...');
-    await cleanupOldOrders();
+    console.log('[Order Jobs] Scheduled daily trigger started...');
+    await autoExpireUncollectedOrders();
   });
 
-  console.log(`[Order Cleanup Job] Scheduled daily cleanup job active with pattern '${schedulePattern}'`);
+  // Also run auto-expiry check on hourly interval to catch day turnovers immediately
+  cron.schedule('0 * * * *', async () => {
+    await autoExpireUncollectedOrders();
+  });
+
+  console.log(`[Order Cleanup Job] Scheduled jobs active with pattern '${schedulePattern}' and hourly auto-expiry checks (automated deletion disabled).`);
 };
 
 module.exports = {
+  autoExpireUncollectedOrders,
   cleanupOldOrders,
   initOrderCleanupJob,
 };

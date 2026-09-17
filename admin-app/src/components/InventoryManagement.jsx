@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Trash2, Edit2, Archive, AlertTriangle, 
-  User, History, Sparkles, Scale, RefreshCw, Check, X, AlertCircle
+  User, History, Sparkles, Scale, RefreshCw, Check, X, AlertCircle,
+  Utensils, Zap, ShieldCheck, ShieldAlert, Layers
 } from 'lucide-react';
 import api from '../services/api';
+import { createAdminSocketClient } from '../services/socket';
 
 const PREDEFINED_CATEGORIES = [
   { id: 'vegetables', name: 'Vegetables' },
@@ -62,6 +64,21 @@ export default function InventoryManagement() {
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState(null);
 
+  // View Mode: 'raw' (Raw Warehouse Ingredients) vs 'menu_stock' (Prepared Menu Stock Portions)
+  const [activeInventoryTab, setActiveInventoryTab] = useState('raw');
+
+  // Prepared Menu Stock States
+  const [menuStockItems, setMenuStockItems] = useState([]);
+  const [stockTrackingEnabled, setStockTrackingEnabled] = useState(false);
+  const [loadingMenuStock, setLoadingMenuStock] = useState(false);
+  const [togglingTracking, setTogglingTracking] = useState(false);
+  const [menuSearch, setMenuSearch] = useState('');
+  const [menuMealTypeFilter, setMenuMealTypeFilter] = useState('all');
+  const [menuStockStatusFilter, setMenuStockStatusFilter] = useState('all');
+  const [updatingItemId, setUpdatingItemId] = useState(null);
+  const [editedQuantities, setEditedQuantities] = useState({});
+  const [editedLimits, setEditedLimits] = useState({});
+
   // Get all unique categories in items, preserving predefined ones first
   const getCategoriesList = () => {
     const list = [...PREDEFINED_CATEGORIES];
@@ -99,6 +116,32 @@ export default function InventoryManagement() {
   // Hooks
   useEffect(() => {
     fetchSummary();
+    fetchMenuStock();
+
+    const token = localStorage.getItem('token');
+    let socket = null;
+    if (token) {
+      try {
+        socket = createAdminSocketClient(token);
+        socket.on('inventory:tracking_toggled', (payload) => {
+          if (payload) {
+            const isTracking = Boolean(payload.tracking_enabled ?? payload.trackingEnabled);
+            setStockTrackingEnabled(isTracking);
+          }
+        });
+        socket.on('menu:stock_updated', () => {
+          fetchMenuStock();
+        });
+      } catch (e) {
+        console.error('Socket init error in InventoryManagement:', e);
+      }
+    }
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -272,6 +315,113 @@ export default function InventoryManagement() {
     }
   };
 
+  // 10. Fetch Prepared Menu Stock
+  const fetchMenuStock = async () => {
+    setLoadingMenuStock(true);
+    try {
+      const res = await api.get('/inventory/menu-stock');
+      if (res.data?.success) {
+        const isTracking = Boolean(res.data.tracking_enabled ?? res.data.trackingEnabled);
+        setStockTrackingEnabled(isTracking);
+        const list = res.data.items || [];
+        setMenuStockItems(list);
+        const qMap = {};
+        const lMap = {};
+        list.forEach((i) => {
+          qMap[i.id] = i.available_quantity;
+          lMap[i.id] = i.daily_stock_limit || 100;
+        });
+        setEditedQuantities(qMap);
+        setEditedLimits(lMap);
+      }
+    } catch (err) {
+      console.error('Failed to fetch menu stock:', err);
+    } finally {
+      setLoadingMenuStock(false);
+    }
+  };
+
+  // 11. Toggle Master Menu Stock Tracking
+  const handleToggleStockTracking = async () => {
+    const nextState = !stockTrackingEnabled;
+    setTogglingTracking(true);
+    try {
+      const res = await api.put('/inventory/menu-stock/toggle', { enabled: nextState });
+      if (res.data?.success) {
+        const isTracking = Boolean(res.data.tracking_enabled ?? res.data.trackingEnabled ?? nextState);
+        setStockTrackingEnabled(isTracking);
+        showToast(
+          isTracking
+            ? 'Menu Stock Tracking Activated! Portions will auto-deduct on student orders.'
+            : 'Menu Stock Tracking Deactivated. Unlimited ordering restored.'
+        );
+      }
+    } catch (err) {
+      showToast('Failed to update tracking setting', 'error');
+    } finally {
+      setTogglingTracking(false);
+    }
+  };
+
+  // 12. Update Individual Item Portions & In-Stock Status
+  const handleUpdateItemStock = async (item, targetQty, targetAvail, targetLimit) => {
+    const qty = targetQty !== undefined 
+      ? parseInt(targetQty, 10) 
+      : (editedQuantities[item.id] !== undefined ? parseInt(editedQuantities[item.id], 10) : item.available_quantity);
+    if (isNaN(qty) || qty < 0) {
+      showToast('Please enter a valid portion quantity', 'error');
+      return;
+    }
+    const limit = targetLimit !== undefined 
+      ? parseInt(targetLimit, 10) 
+      : (editedLimits[item.id] !== undefined ? parseInt(editedLimits[item.id], 10) : (item.daily_stock_limit || 100));
+    const avail = targetAvail !== undefined 
+      ? (targetAvail ? 1 : 0) 
+      : (qty === 0 ? 0 : item.is_available);
+
+    setUpdatingItemId(item.id);
+    try {
+      const res = await api.put(`/inventory/menu-stock/${item.id}`, {
+        available_quantity: qty,
+        daily_stock_limit: limit,
+        is_available: avail
+      });
+      if (res.data?.success) {
+        showToast(`'${item.name}' updated: ${qty} portions (${avail ? 'In Stock' : 'Out of Stock'})`);
+        setMenuStockItems(prev => prev.map(m => m.id === item.id ? { ...m, available_quantity: qty, daily_stock_limit: limit, is_available: avail } : m));
+        setEditedQuantities(prev => ({ ...prev, [item.id]: qty }));
+        setEditedLimits(prev => ({ ...prev, [item.id]: limit }));
+      }
+    } catch (err) {
+      showToast('Failed to update portion stock', 'error');
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  // 13. Batch Reset Portions for All Active Items
+  const handleBatchStockReset = async (qty = 50) => {
+    if (!window.confirm(`Set all ${menuStockItems.length} active menu items to ${qty} portions and In-Stock?`)) return;
+    setSaving(true);
+    try {
+      const payloadItems = menuStockItems.map(m => ({
+        id: m.id,
+        available_quantity: qty,
+        daily_stock_limit: qty,
+        is_available: 1
+      }));
+      const res = await api.post('/inventory/menu-stock/batch', { items: payloadItems });
+      if (res.data?.success) {
+        showToast(`Successfully reset all active menu items to ${qty} portions!`);
+        fetchMenuStock();
+      }
+    } catch (err) {
+      showToast('Failed to batch update portions', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       
@@ -289,14 +439,95 @@ export default function InventoryManagement() {
         </div>
       )}
 
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Total Inventory</h2>
-          <p className="text-xs text-slate-500 font-semibold mt-0.5">
-            Maintain grocery items, map ingredient serving weights, and view auto-depletion records
-          </p>
+      {/* Top View Mode Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-2 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80">
+          <button
+            type="button"
+            onClick={() => setActiveInventoryTab('raw')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-black text-xs transition-all cursor-pointer ${
+              activeInventoryTab === 'raw'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <span>🌾</span>
+            <span>Raw Ingredients (Warehouse)</span>
+            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">
+              {stats.totalItems} Items
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveInventoryTab('menu_stock');
+              if (menuStockItems.length === 0) fetchMenuStock();
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-black text-xs transition-all cursor-pointer ${
+              activeInventoryTab === 'menu_stock'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <span>🍲</span>
+            <span>Prepared Menu Stock & Portions</span>
+            <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black ${
+              stockTrackingEnabled 
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                : 'bg-slate-200 text-slate-600'
+            }`}>
+              {stockTrackingEnabled ? '● Tracking ON' : '○ Tracking OFF'}
+            </span>
+          </button>
         </div>
+
+        {activeInventoryTab === 'raw' ? (
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Register New Ingredient</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchMenuStock()}
+              disabled={loadingMenuStock}
+              className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-2 rounded-xl border border-slate-200 transition cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingMenuStock ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+            <button
+              onClick={() => handleBatchStockReset(50)}
+              disabled={saving || menuStockItems.length === 0}
+              className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer"
+            >
+              <span>Reset All to 50</span>
+            </button>
+            <button
+              onClick={() => handleBatchStockReset(100)}
+              disabled={saving || menuStockItems.length === 0}
+              className="inline-flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer"
+            >
+              <span>Reset All to 100</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {activeInventoryTab === 'raw' && (
+        <>
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Total Inventory</h2>
+              <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                Maintain grocery items, map ingredient serving weights, and view auto-depletion records
+              </p>
+            </div>
 
         <button
           onClick={openAddModal}
@@ -712,6 +943,422 @@ export default function InventoryManagement() {
         )}
 
       </div>
+      </>
+      )}
+
+      {/* Prepared Menu Stock & Portion Management View */}
+      {activeInventoryTab === 'menu_stock' && (
+        <div className="space-y-6">
+          {/* Master Toggle Banner */}
+          <div className={`p-6 rounded-3xl border transition-all ${
+            stockTrackingEnabled
+              ? 'bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 text-white border-emerald-500/40 shadow-xl'
+              : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white border-slate-700 shadow-xl'
+          }`}>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${
+                    stockTrackingEnabled
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                      : 'bg-slate-700 text-slate-300 border border-slate-600'
+                  }`}>
+                    {stockTrackingEnabled ? '● Stock Tracking Active' : '○ Stock Tracking Inactive'}
+                  </span>
+                  <span className="text-xs font-bold text-slate-400">Live Portion Deduction & Limits</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                  Menu Stock Tracking & Portion Control
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  {stockTrackingEnabled ? (
+                    <>
+                      <strong className="text-emerald-300">Portion deduction is ACTIVE.</strong> When students place orders, portion quantities are deducted in real-time. Dishes reaching 0 portions are automatically switched to <strong className="text-red-300">Out of Stock</strong>. If a student tries to order more portions than available, a real-time warning popup alerts them and the order is prevented.
+                    </>
+                  ) : (
+                    <>
+                      <strong className="text-amber-300">Portion deduction is INACTIVE.</strong> Students can order meals freely without portion limits. Stock quantities below can still be configured and updated as kitchen preparation references, but no deductions or portion cap warnings will be enforced.
+                    </>
+                  )}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4 shrink-0 bg-white/5 p-4 rounded-2xl border border-white/10 backdrop-blur">
+                <div className="text-right">
+                  <p className="text-xs font-bold text-slate-300">Master Toggle</p>
+                  <p className={`text-sm font-black ${stockTrackingEnabled ? 'text-emerald-400' : 'text-slate-400'}`}>
+                    {stockTrackingEnabled ? 'Tracking Active' : 'Tracking Inactive'}
+                  </p>
+                </div>
+
+                {/* Master Toggle Button */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={stockTrackingEnabled}
+                  disabled={togglingTracking}
+                  onClick={handleToggleStockTracking}
+                  className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none ${
+                    stockTrackingEnabled ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50' : 'bg-slate-700'
+                  } ${togglingTracking ? 'opacity-50 cursor-wait' : ''}`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-lg ring-0 transition duration-300 ease-in-out ${
+                      stockTrackingEnabled ? 'translate-x-8' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Prepared Stock Summary KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 text-2xl font-bold">
+                🍲
+              </div>
+              <div>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Active Menu Items</p>
+                <h3 className="text-2xl font-black text-slate-900">{menuStockItems.length}</h3>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 text-2xl font-bold border border-emerald-100">
+                ⚡
+              </div>
+              <div>
+                <p className="text-emerald-700/70 text-[10px] font-bold uppercase tracking-wider">Total Portions Ready</p>
+                <h3 className="text-2xl font-black text-emerald-800">
+                  {menuStockItems.reduce((acc, i) => acc + (i.is_available ? (Number(i.available_quantity) || 0) : 0), 0)}
+                </h3>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold ${
+                menuStockItems.filter(i => i.is_available && Number(i.available_quantity) > 0 && Number(i.available_quantity) < 10).length > 0
+                  ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                  : 'bg-slate-100 text-slate-400'
+              }`}>
+                ⚠️
+              </div>
+              <div>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Low Stock (&lt;10)</p>
+                <h3 className={`text-2xl font-black ${
+                  menuStockItems.filter(i => i.is_available && Number(i.available_quantity) > 0 && Number(i.available_quantity) < 10).length > 0
+                    ? 'text-amber-600'
+                    : 'text-slate-900'
+                }`}>
+                  {menuStockItems.filter(i => i.is_available && Number(i.available_quantity) > 0 && Number(i.available_quantity) < 10).length}
+                </h3>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold ${
+                menuStockItems.filter(i => !i.is_available || Number(i.available_quantity) <= 0).length > 0
+                  ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
+                  : 'bg-slate-100 text-slate-400'
+              }`}>
+                🚨
+              </div>
+              <div>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Out of Stock</p>
+                <h3 className={`text-2xl font-black ${
+                  menuStockItems.filter(i => !i.is_available || Number(i.available_quantity) <= 0).length > 0
+                    ? 'text-red-600'
+                    : 'text-slate-900'
+                }`}>
+                  {menuStockItems.filter(i => !i.is_available || Number(i.available_quantity) <= 0).length}
+                </h3>
+              </div>
+            </div>
+          </div>
+
+          {/* Search, Category Filters, and Stock Status Filter */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+              <div className="relative w-full md:w-80">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search dishes by name..."
+                  value={menuSearch}
+                  onChange={(e) => setMenuSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 outline-none font-medium"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                {/* Meal Type Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-500">Meal:</span>
+                  <select
+                    value={menuMealTypeFilter}
+                    onChange={(e) => setMenuMealTypeFilter(e.target.value)}
+                    className="border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-emerald-600 outline-none bg-white"
+                  >
+                    <option value="all">All Meals</option>
+                    <option value="breakfast">Breakfast</option>
+                    <option value="lunch">Lunch</option>
+                    <option value="snacks">Snacks</option>
+                    <option value="dinner">Dinner</option>
+                  </select>
+                </div>
+
+                {/* Stock Status Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-500">Status:</span>
+                  <select
+                    value={menuStockStatusFilter}
+                    onChange={(e) => setMenuStockStatusFilter(e.target.value)}
+                    className="border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-emerald-600 outline-none bg-white"
+                  >
+                    <option value="all">All Stock Statuses</option>
+                    <option value="in_stock">In Stock Only</option>
+                    <option value="low_stock">Low Stock (&lt; 10)</option>
+                    <option value="out_of_stock">Out of Stock Only</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Dishes Stock Table */}
+            {loadingMenuStock ? (
+              <div className="text-center py-16 text-slate-400 font-bold text-xs flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Loading active menu items and stock counts...</span>
+              </div>
+            ) : (() => {
+              const filteredList = menuStockItems.filter(item => {
+                if (menuSearch.trim() && !item.name.toLowerCase().includes(menuSearch.toLowerCase())) return false;
+                if (menuMealTypeFilter !== 'all' && item.category !== menuMealTypeFilter) return false;
+                const qty = editedQuantities[item.id] !== undefined ? editedQuantities[item.id] : item.available_quantity;
+                const isAvail = item.is_available && Number(qty) > 0;
+                if (menuStockStatusFilter === 'in_stock' && !isAvail) return false;
+                if (menuStockStatusFilter === 'low_stock' && (!item.is_available || Number(qty) <= 0 || Number(qty) >= 10)) return false;
+                if (menuStockStatusFilter === 'out_of_stock' && isAvail) return false;
+                return true;
+              });
+
+              if (filteredList.length === 0) {
+                return (
+                  <div className="text-center py-14 border rounded-xl border-dashed border-slate-200">
+                    <p className="font-bold text-slate-600">No menu items match your filters.</p>
+                    <p className="text-xs text-slate-400 mt-1">Try clearing search or changing category/status filters.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
+                        <th className="py-3 pl-2">Dish</th>
+                        <th className="py-3">Meal Type</th>
+                        <th className="py-3">Price</th>
+                        <th className="py-3">Live Status</th>
+                        <th className="py-3">Available Portions</th>
+                        <th className="py-3">Quick Adjust</th>
+                        <th className="py-3 text-right pr-2">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredList.map((item) => {
+                        const currentQty = editedQuantities[item.id] !== undefined ? editedQuantities[item.id] : item.available_quantity;
+                        const isLow = item.is_available && Number(currentQty) > 0 && Number(currentQty) < 10;
+                        const isOutOfStock = !item.is_available || Number(currentQty) <= 0;
+                        const isUpdating = updatingItemId === item.id;
+                        const limit = item.daily_stock_limit || 100;
+                        const pct = Math.min(100, Math.round(((Number(currentQty) || 0) / limit) * 100));
+
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/60 transition">
+                            {/* Dish Info */}
+                            <td className="py-4 pl-2">
+                              <div className="flex items-center gap-3">
+                                {item.image_url ? (
+                                  <img
+                                    src={item.image_url}
+                                    alt={item.name}
+                                    className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-lg shrink-0">
+                                    🍲
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`w-2 h-2 rounded-full ${item.is_veg ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                    <span className="font-extrabold text-slate-900 text-sm">{item.name}</span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    Daily Limit: {limit} portions
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Meal Type */}
+                            <td className="py-4 capitalize">
+                              <span className="bg-slate-100 text-slate-700 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider">
+                                {item.category || 'General'}
+                              </span>
+                            </td>
+
+                            {/* Price */}
+                            <td className="py-4 font-black text-slate-800 text-sm">
+                              ₹{item.price}
+                            </td>
+
+                            {/* Live Status Toggle */}
+                            <td className="py-4">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateItemStock(item, currentQty, !item.is_available)}
+                                disabled={isUpdating}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
+                                  !isOutOfStock
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                                }`}
+                              >
+                                <span className={`w-2 h-2 rounded-full ${!isOutOfStock ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                <span>{!isOutOfStock ? 'In Stock' : 'Out of Stock'}</span>
+                              </button>
+                            </td>
+
+                            {/* Available Portions Input & Gauge */}
+                            <td className="py-4 w-48">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={currentQty}
+                                    onChange={(e) => {
+                                      const val = e.target.value === '' ? '' : parseInt(e.target.value, 10);
+                                      setEditedQuantities(prev => ({ ...prev, [item.id]: val }));
+                                    }}
+                                    className={`w-20 px-2.5 py-1.5 rounded-lg border text-sm font-black outline-none transition ${
+                                      isOutOfStock
+                                        ? 'border-red-300 text-red-700 bg-red-50/50'
+                                        : isLow
+                                        ? 'border-amber-300 text-amber-800 bg-amber-50/50'
+                                        : 'border-slate-300 text-slate-900 bg-white focus:border-emerald-600'
+                                    }`}
+                                  />
+                                  <span className="text-[11px] font-bold text-slate-400">portions</span>
+                                </div>
+
+                                {/* Progress bar */}
+                                <div className="w-32 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className={`h-full transition-all duration-300 ${
+                                      isOutOfStock ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'
+                                    }`}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Quick Adjust Buttons */}
+                            <td className="py-4">
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = Math.max(0, (Number(currentQty) || 0) - 5);
+                                    setEditedQuantities(prev => ({ ...prev, [item.id]: next }));
+                                  }}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
+                                  title="Reduce 5 portions"
+                                >
+                                  -5
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = (Number(currentQty) || 0) + 10;
+                                    setEditedQuantities(prev => ({ ...prev, [item.id]: next }));
+                                  }}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
+                                  title="Add 10 portions"
+                                >
+                                  +10
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = (Number(currentQty) || 0) + 25;
+                                    setEditedQuantities(prev => ({ ...prev, [item.id]: next }));
+                                  }}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
+                                  title="Add 25 portions"
+                                >
+                                  +25
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = (Number(currentQty) || 0) + 50;
+                                    setEditedQuantities(prev => ({ ...prev, [item.id]: next }));
+                                  }}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
+                                  title="Add 50 portions"
+                                >
+                                  +50
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditedQuantities(prev => ({ ...prev, [item.id]: 0 }));
+                                  }}
+                                  className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 font-extrabold text-[10px] rounded-lg transition cursor-pointer"
+                                  title="Set to 0 portions"
+                                >
+                                  Set 0
+                                </button>
+                              </div>
+                            </td>
+
+                            {/* Save Action */}
+                            <td className="py-4 text-right pr-2">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateItemStock(item, currentQty)}
+                                disabled={isUpdating}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                              >
+                                {isUpdating ? (
+                                  <>
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Saving...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Save</span>
+                                  </>
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Inventory Modal */}
       {isAddEditOpen && (

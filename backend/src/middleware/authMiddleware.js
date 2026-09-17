@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const prisma = require('../database/prisma');
+const { pool } = require('../database/db');
 
 // Middleware to verify Student JWT
 const verifyStudent = async (req, res, next) => {
@@ -16,16 +16,11 @@ const verifyStudent = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Forbidden. Student access required.' });
     }
 
-    const student = await prisma.student.findUnique({
-      where: { id: decoded.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        roll_no: true,
-        is_verified: true,
-      },
-    });
+    const [rows] = await pool.execute(
+      'SELECT id, name, email, phone, roll_no, is_verified, created_at FROM Student WHERE id = ? LIMIT 1',
+      [decoded.id]
+    );
+    const student = rows[0] || null;
 
     if (!student) {
       return res.status(401).json({ success: false, message: 'Student account not found.' });
@@ -36,6 +31,7 @@ const verifyStudent = async (req, res, next) => {
     }
 
     req.user = { ...student, _id: student.id };
+    req.student = { ...student, _id: student.id };
     req.studentId = student.id;
     next();
   } catch (error) {
@@ -44,6 +40,34 @@ const verifyStudent = async (req, res, next) => {
     }
     return res.status(401).json({ success: false, message: 'Invalid authentication token.' });
   }
+};
+
+// Middleware to optionally extract Student JWT if present (does not block if absent)
+const optionalStudentAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next();
+    }
+    const token = authHeader.split(' ')[1];
+    if (!token || token === 'null' || token === 'undefined') {
+      return next();
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_access_key_change_in_production');
+    if (decoded.role === 'student') {
+      const [rows] = await pool.execute(
+        'SELECT id, name, email, phone, roll_no, is_verified, created_at FROM Student WHERE id = ? LIMIT 1',
+        [decoded.id]
+      );
+      if (rows.length > 0) {
+        req.student = rows[0];
+        req.studentId = rows[0].id;
+      }
+    }
+  } catch (err) {
+    // Ignore invalid/expired token for optional middleware
+  }
+  next();
 };
 
 // Middleware to verify Admin JWT
@@ -68,24 +92,16 @@ const verifyAdmin = async (req, res, next) => {
     const jwtSecret = process.env.JWT_SECRET || 'super_secret_jwt_access_key_change_in_production';
     const decoded = jwt.verify(token, jwtSecret);
 
-    if (!['super_admin', 'staff'].includes(decoded.role)) {
+    if (!['super_admin', 'admin', 'staff'].includes(decoded.role)) {
       console.warn(`[verifyAdmin Auth Fail] Path: ${req.originalUrl} - Invalid role: ${decoded.role}`);
       return res.status(403).json({ success: false, code: 'FORBIDDEN_ROLE', message: 'Forbidden. Admin access required.' });
     }
 
-    const admin = await prisma.adminUser.findUnique({
-      where: { id: decoded.id },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        role: true,
-        is_active: true,
-        is_verified: true,
-        last_login_at: true,
-        created_at: true,
-      },
-    });
+    const [rows] = await pool.execute(
+      'SELECT id, username, email, role, is_active, is_verified, last_login_at, created_at FROM AdminUser WHERE id = ? LIMIT 1',
+      [decoded.id]
+    );
+    const admin = rows[0] || null;
 
     if (!admin) {
       console.warn(`[verifyAdmin Auth Fail] Path: ${req.originalUrl} - Admin ID ${decoded.id} not found in DB.`);
@@ -144,9 +160,11 @@ const verifyOwner = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Forbidden. Owner access required.' });
     }
 
-    const owner = await prisma.adminUser.findFirst({
-      where: { id: decoded.id, role: 'owner' }
-    });
+    const [rows] = await pool.execute(
+      'SELECT * FROM AdminUser WHERE id = ? AND role = ? LIMIT 1',
+      [decoded.id, 'owner']
+    );
+    const owner = rows[0] || null;
 
     if (!owner) {
       return res.status(401).json({ success: false, message: 'Owner account not found.' });
@@ -168,6 +186,7 @@ const verifyOwner = async (req, res, next) => {
 
 module.exports = {
   verifyStudent,
+  optionalStudentAuth,
   verifyAdmin,
   requireRole,
   verifyOwner,

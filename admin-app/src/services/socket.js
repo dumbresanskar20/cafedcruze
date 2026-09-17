@@ -1,25 +1,16 @@
 import { io } from 'socket.io-client';
 
 export const getSocketUrl = () => {
-  const isBrowser = typeof window !== 'undefined';
-  const isLocalhostDomain = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
   if (import.meta.env.VITE_SOCKET_URL) {
-    const url = import.meta.env.VITE_SOCKET_URL.replace(/\/+$/, '');
-    if (isLocalhostDomain || (!url.includes('localhost') && !url.includes('127.0.0.1'))) {
-      return url;
-    }
+    return import.meta.env.VITE_SOCKET_URL.replace(/\/+$/, '');
   }
 
   if (import.meta.env.VITE_API_URL) {
     const cleanApi = import.meta.env.VITE_API_URL.replace(/\/+$/, '');
-    const url = cleanApi.replace(/\/api\/?$/i, '');
-    if (isLocalhostDomain || (!url.includes('localhost') && !url.includes('127.0.0.1'))) {
-      return url;
-    }
+    return cleanApi.replace(/\/api\/?$/i, '');
   }
 
-  return 'https://messmgmt-1.onrender.com';
+  return 'https://cafe-d-cruze-api.mealbook.in';
 };
 
 export const createAdminSocketClient = (token) => {
@@ -28,7 +19,7 @@ export const createAdminSocketClient = (token) => {
 
   const options = {
     auth: { token },
-    transports: ['websocket', 'polling'], // Fallback between websocket & HTTP long-polling
+    transports: ['polling', 'websocket'], // Reliable handshake starting with polling, upgrading to websocket
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
@@ -41,6 +32,7 @@ export const createAdminSocketClient = (token) => {
 
   socket.on('connect', () => {
     console.log(`[Admin Socket.IO Connected] Socket ID: ${socket.id} (URL: ${socketUrl})`);
+    socket.emit('join:kitchen');
   });
 
   socket.on('connect_error', (err) => {

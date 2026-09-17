@@ -103,6 +103,11 @@ export default function StaffManagement() {
           </p>
         </div>
 
+        {/* =========================================================================
+            SECTION TO CREATE/REGISTER NEW STAFF - CURRENTLY COMMENTED OUT
+            (Uncomment this block in the future if staff creation is needed)
+            ========================================================================= */}
+        {/* 
         <button
           onClick={() => {
             setUsername('');
@@ -119,6 +124,7 @@ export default function StaffManagement() {
           <UserPlus className="w-5 h-5" />
           <span>Create New Staff Account</span>
         </button>
+        */}
       </div>
 
       {/* Staff Accounts List Table */}
@@ -208,7 +214,11 @@ export default function StaffManagement() {
         </div>
       )}
 
-      {/* Create Staff Modal */}
+      {/* =========================================================================
+          CREATE STAFF ACCOUNT MODAL - CURRENTLY COMMENTED OUT
+          (Uncomment this block in the future if staff modal is needed)
+          ========================================================================= */}
+      {/* 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200">
@@ -318,6 +328,7 @@ export default function StaffManagement() {
           </div>
         </div>
       )}
+      */}
 
       {/* Delete Account Confirmation Modal */}
       {deleteTargetAccount && (

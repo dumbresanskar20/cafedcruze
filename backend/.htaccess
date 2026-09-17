@@ -1,0 +1,9 @@
+# ----------------------------------------------------------------------
+# Passenger / LiteSpeed Node.js Process Manager Limits
+# Enforce exactly ONE Node.js instance per app root to prevent duplicate
+# process spawning during concurrent bursts (e.g. Razorpay payment & webhook)
+# and prevent exceeding CloudLinux 150-process account limits.
+# ----------------------------------------------------------------------
+PassengerMinInstances 1
+PassengerMaxInstances 1
+PassengerPoolIdleTime 300

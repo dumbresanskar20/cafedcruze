@@ -7,3 +7,6 @@ ds_store
 dev.db
 scratch/
 
+# Explicitly whitelist deployment configuration dotfiles
+!.htaccess
+

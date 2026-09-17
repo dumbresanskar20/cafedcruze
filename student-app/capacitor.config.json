@@ -1,0 +1,19 @@
+{
+  "appId": "com.dypcoei.mealbook",
+  "appName": "Cafe D Cruze Restaurant",
+  "webDir": "dist",
+  "server": {
+    "url": "https://dev.mealbook.in",
+    "cleartext": true
+  },
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": [
+        "profile",
+        "email"
+      ],
+      "serverClientId": "404710338094-d5cganqkkrjn1bkptmnju0m2dmdvs5ss.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
+  }
+}

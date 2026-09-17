@@ -5,6 +5,7 @@ const {
   verifyOTP,
   resendOTP,
   loginStudent,
+  googleAuthStudent,
   getStudentProfile,
   forgotPassword,
   resetPassword,
@@ -15,6 +16,7 @@ const { authLimiter, forgotPasswordLimiter, resendOtpLimiter } = require('../mid
 
 // Rate limited public auth routes
 router.post('/signup', authLimiter, registerStudent);
+router.post('/google', authLimiter, googleAuthStudent);
 router.post('/verify-otp', authLimiter, verifyOTP);
 router.post('/resend-otp', resendOtpLimiter, resendOTP);
 router.post('/login', authLimiter, loginStudent);

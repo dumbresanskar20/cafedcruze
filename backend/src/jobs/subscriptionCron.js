@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const prisma = require('../database/prisma');
+const { pool } = require('../database/db');
 
 /**
  * Proactive daily cron job to check subscription expiration and update DB status.
@@ -8,19 +8,16 @@ const checkSubscriptionExpiryJob = async () => {
   const now = new Date();
 
   try {
-    const expiredSubscriptions = await prisma.subscription.updateMany({
-      where: {
-        subscription_end_date: { lt: now },
-        status: 'active',
-      },
-      data: {
-        status: 'expired',
-      },
-    });
+    const [result] = await pool.execute(
+      'UPDATE `Subscription` SET status = ? WHERE subscription_end_date < ? AND status = ?',
+      ['expired', now, 'active']
+    );
 
-    if (expiredSubscriptions.count > 0) {
+    const count = result.affectedRows || 0;
+
+    if (count > 0) {
       console.warn(
-        `⚠️ [Subscription Cron Job] Flipped ${expiredSubscriptions.count} subscription(s) to EXPIRED state on ${now.toISOString()}`
+        `⚠️ [Subscription Cron Job] Flipped ${count} subscription(s) to EXPIRED state on ${now.toISOString()}`
       );
     } else {
       console.log(`✅ [Subscription Cron Job] Checked subscription status on ${now.toISOString()}: active.`);

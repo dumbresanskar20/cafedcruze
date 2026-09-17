@@ -7,6 +7,8 @@ const {
   deleteMenuItem,
   getMealWindows,
   updateMealWindow,
+  createMealType,
+  renameMealType,
   getMenuItemRecipe,
 } = require('../controllers/menuController');
 const { verifyAdmin } = require('../middleware/authMiddleware');
@@ -18,7 +20,7 @@ router.get('/admin/menu-items', getMenuItems);
 router.get('/windows', getMealWindows);
 router.get('/types', getMealWindows);
 
-// Admin-only endpoints for menu items with Cloudinary image upload middleware
+// Admin-only endpoints for menu items with local disk image upload middleware
 router.post('/items', verifyAdmin, handleImageUpload('image'), createMenuItem);
 router.post('/admin/menu-items', verifyAdmin, handleImageUpload('image'), createMenuItem);
 router.put('/items/:id', verifyAdmin, handleImageUpload('image'), updateMenuItem);
@@ -30,7 +32,11 @@ router.delete('/admin/menu-items/:id', verifyAdmin, deleteMenuItem);
 router.get('/items/:id/recipe', verifyAdmin, getMenuItemRecipe);
 router.get('/admin/menu-items/:id/recipe', verifyAdmin, getMenuItemRecipe);
 
-// Admin-only endpoint for meal timings
+// Admin-only endpoints for meal timings & dynamic meal types
+router.put('/windows/:meal_type/rename', verifyAdmin, renameMealType);
 router.put('/windows/:meal_type', verifyAdmin, updateMealWindow);
+router.post('/windows', verifyAdmin, createMealType);
+router.put('/meal-types/:meal_type/rename', verifyAdmin, renameMealType);
+router.post('/meal-types', verifyAdmin, createMealType);
 
 module.exports = router;

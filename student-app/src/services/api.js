@@ -1,11 +1,10 @@
 import axios from 'axios';
 
-const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 const envApiUrl = import.meta.env.VITE_API_URL;
 
-const rawApiUrl = isLocalhost
-  ? (envApiUrl && (envApiUrl.includes('localhost') || envApiUrl.includes('127.0.0.1')) ? envApiUrl : 'http://localhost:5000/api')
-  : (envApiUrl && !envApiUrl.includes('localhost') && !envApiUrl.includes('127.0.0.1') ? envApiUrl : 'https://messmgmt-1.onrender.com/api');
+const rawApiUrl = envApiUrl
+  ? envApiUrl
+  : 'https://cafe-d-cruze-api.mealbook.in/api';
 
 const cleanApiUrl = rawApiUrl.replace(/\/+$/, '');
 const API_BASE_URL = cleanApiUrl.endsWith('/api') ? cleanApiUrl : `${cleanApiUrl}/api`;
@@ -49,8 +48,16 @@ api.interceptors.response.use(
     }
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
       const msg = error.response.data?.message || '';
-      // If token expired, invalid, or account is unverified/forbidden, clear stale token
-      if (error.response.status === 401 || msg.includes('token') || msg.includes('verified') || msg.includes('Forbidden')) {
+      const code = error.response.data?.code || '';
+      // If token is explicitly expired, invalid, or account unverified, clear stale session token
+      if (
+        code === 'TOKEN_EXPIRED' ||
+        code === 'INVALID_TOKEN' ||
+        code === 'NO_TOKEN' ||
+        msg.includes('Token expired') ||
+        msg.includes('Invalid authentication token') ||
+        msg.includes('not verified')
+      ) {
         console.warn(`[Student API] ${error.response.status} Authentication error detected — clearing stale session tokens.`);
         localStorage.removeItem('student_token');
         localStorage.removeItem('student_user');

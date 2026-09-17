@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingBag, User, LogOut, Receipt, ChevronDown, KeyRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import CAFE_D_CRUZE_LOGO from '../assets/logo';
+import DownloadAppButton from './DownloadAppButton';
 
 export default function Header({ onOpenOrders }) {
   const { student, isAuthenticated, openAuthModal, logout } = useAuth();
@@ -30,12 +32,14 @@ export default function Header({ onOpenOrders }) {
             className="flex items-center gap-2 sm:gap-3 cursor-pointer shrink-0 min-w-0"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-brand-orange to-amber-500 flex items-center justify-center text-white text-xl sm:text-2xl shadow-warm hover:rotate-6 transition-transform shrink-0">
-              🍱
-            </div>
+            <img
+              src={CAFE_D_CRUZE_LOGO}
+              alt="Cafe D Cruze Restaurant Logo"
+              className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl object-contain bg-white p-0.5 shadow-warm border border-amber-200 hover:rotate-6 transition-transform shrink-0"
+            />
             <div className="min-w-0">
               <span className="font-display font-extrabold text-lg sm:text-2xl text-brand-dark tracking-tight leading-none block whitespace-nowrap truncate">
-                Campus<span className="text-brand-orange">Mess</span>
+                Cafe D Cruze <span className="text-brand-orange">Restaurant</span>
               </span>
               <span className="text-[10px] sm:text-xs font-semibold text-stone-500 tracking-wider uppercase hidden sm:block whitespace-nowrap">
                 Fresh & Delicious Daily
@@ -46,6 +50,9 @@ export default function Header({ onOpenOrders }) {
           {/* Right Action Bar: Cart Icon & Persistent Auth Control */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             
+            {/* Download Android App Button (Conditionally visible ONLY on Android Web Browsers) */}
+            <DownloadAppButton />
+
             {/* Cart Tray Trigger */}
             <button
               onClick={() => setIsCartOpen(true)}
@@ -82,7 +89,7 @@ export default function Header({ onOpenOrders }) {
                     <div className="px-4 py-2 border-b border-stone-100">
                       <p className="text-[10px] sm:text-xs text-stone-500 font-medium">Logged in as</p>
                       <p className="text-xs sm:text-sm font-bold text-stone-800 truncate">{student.name}</p>
-                      <p className="text-[10px] sm:text-[11px] text-stone-400 truncate">{student.roll_no}</p>
+                      <p className="text-[10px] sm:text-[11px] text-stone-400 truncate">{student.roll_no}{student.phone ? ` • ${student.phone}` : ''}</p>
                     </div>
 
                     <button

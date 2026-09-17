@@ -85,3 +85,23 @@ This backend database layer is built using standard ANSI SQL / Prisma ORM and is
    ```
 
 No backend code changes or redeployments are required when switching database providers — only updating the `DATABASE_URL` environment variable.
+
+---
+
+## cPanel Process Caps & Passenger Configuration
+
+When deploying to cPanel shared hosting (e.g. `domainz.in` running CloudLinux with an Apache/LiteSpeed Phusion Passenger process manager):
+
+- **Account Process Limit**: CloudLinux enforces a hard limit of **150 concurrent processes** across the entire cPanel account (including Apache, MySQL, PHP, cron jobs, and all Node.js applications).
+- **Process Cap Directives (`.htaccess`)**: The `/backend/.htaccess` file configures Passenger with:
+  ```apache
+  PassengerMinInstances 1
+  PassengerMaxInstances 1
+  PassengerPoolIdleTime 300
+  ```
+- **Why this is critical**: During payment bursts (simultaneous Razorpay checkout calls, webhooks, and verification requests), Passenger's dynamic scaling would otherwise spawn duplicate Node.js worker processes. If multiple app instances (e.g., `/home/mealbook/api/` and `/home/mealbook/devapi.mealbook.in/`) spawn extra processes, the account can exceed the 150-process cap, causing the host to terminate processes.
+- **Rules**:
+  1. **Do NOT remove or increase `PassengerMaxInstances`** without confirming your host account process limits first.
+  2. The `.htaccess` file **must always be included** when copying or deploying `/backend/` to any cPanel app root.
+  3. Single-instance queueing on Express + Node.js event loop handles burst operations with sub-second response times without dropping requests or webhooks.
+

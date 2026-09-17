@@ -12,6 +12,10 @@ export default {
           dark: '#0f172a',
           sidebar: '#1e293b',
         },
+        brand: {
+          orange: '#ea580c',
+          terracotta: '#c2410c',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

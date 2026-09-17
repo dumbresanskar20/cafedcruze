@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Mail, ArrowRight, AlertCircle, Sparkles, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import CAFE_D_CRUZE_LOGO from '../assets/logo';
 
 export default function AdminAuth() {
-  const { login, setPasswordWithToken, loading } = useAdminAuth();
+  const { login, register, setPasswordWithToken, loading } = useAdminAuth();
   
+  // Registration and login mode switches
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [regUsername, setRegUsername] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regRole, setRegRole] = useState('admin');
+
   // URL token check for set-password view
   const [setupToken, setSetupToken] = useState('');
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
@@ -33,6 +42,37 @@ export default function AdminAuth() {
 
     const res = await login(usernameOrEmail, password);
     if (!res.success) {
+      setErrorMsg(res.message);
+    }
+  };
+
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setInfoMsg('');
+
+    if (regPassword.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (regPassword !== regConfirmPassword) {
+      setErrorMsg('Passwords do not match.');
+      return;
+    }
+
+    const res = await register(regUsername, regEmail, regPassword, regConfirmPassword, regRole);
+    if (res.success) {
+      setInfoMsg(res.message || 'Registration successful! You can now log in.');
+      setIsRegisterMode(false);
+      setUsernameOrEmail(regEmail);
+      // Clear registration inputs
+      setRegUsername('');
+      setRegEmail('');
+      setRegPassword('');
+      setRegConfirmPassword('');
+      setRegRole('admin');
+    } else {
       setErrorMsg(res.message);
     }
   };
@@ -72,24 +112,32 @@ export default function AdminAuth() {
     }
   };
 
-  const isOwnerPath = typeof window !== 'undefined' && window.location.pathname === '/owner';
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 select-none">
-      <div className={`w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 border ${isOwnerPath ? 'border-amber-500/40 border-2' : 'border-slate-200'}`}>
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 border border-slate-200">
         
         {/* Header */}
         <div className="text-center mb-6">
-          <div className={`w-14 h-14 rounded-2xl font-black text-2xl flex items-center justify-center mx-auto mb-3 shadow-inner ${isOwnerPath ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
-            {isOwnerPath ? '🛠️' : '👨‍🍳'}
-          </div>
+          <img
+            src={CAFE_D_CRUZE_LOGO}
+            alt="Cafe D Cruze Restaurant Logo"
+            className="w-16 h-16 rounded-2xl object-contain bg-white p-1.5 mx-auto mb-3 shadow-md border border-slate-200"
+          />
 
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            {setupToken ? 'Set Staff Password' : (isOwnerPath ? 'Developer Panel Login' : 'Canteen Admin Login')}
+            {setupToken
+              ? 'Set Staff Password'
+              : isRegisterMode
+              ? 'Register Cafe D Cruze Account'
+              : 'Cafe D Cruze Restaurant Login'}
           </h2>
 
           <p className="text-xs text-slate-500 font-semibold mt-1">
-            {setupToken ? 'Set your password to activate your staff account' : (isOwnerPath ? 'Developer / Owner account only — Handle with Care' : 'Authorized canteen personnel only')}
+            {setupToken
+              ? 'Set your password to activate your staff account'
+              : isRegisterMode
+              ? 'Create credentials to manage the canteen operations'
+              : 'Authorized canteen personnel only'}
           </p>
         </div>
 
@@ -168,6 +216,106 @@ export default function AdminAuth() {
               <Sparkles className="w-4 h-4" />
             </button>
           </form>
+        ) : isRegisterMode ? (
+          /* Registration Mode */
+          <form onSubmit={handleRegisterSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Username</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  required
+                  placeholder="admin_user"
+                  value={regUsername}
+                  onChange={(e) => setRegUsername(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-600 outline-none font-medium"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@mess.com"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-600 outline-none font-medium"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  className="w-full pl-10 pr-11 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-600 outline-none font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-700 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Confirm Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={regConfirmPassword}
+                  onChange={(e) => setRegConfirmPassword(e.target.value)}
+                  className="w-full pl-10 pr-11 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-600 outline-none font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-700 transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Account Role</label>
+              <div className="relative">
+                <select
+                  value={regRole}
+                  onChange={(e) => setRegRole(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-600 outline-none font-bold text-slate-800 bg-white"
+                >
+                  <option value="admin">Canteen Admin (Orders, Menu, Inventory & Timings)</option>
+                  <option value="staff">Kitchen Staff (Kitchen Screen & Orders)</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {loading ? 'Registering...' : `Create ${regRole === 'staff' ? 'Staff' : 'Admin'} Account`}
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
         ) : (
           /* Normal Admin Login Mode */
           <form onSubmit={handleLoginSubmit} className="space-y-4">
@@ -178,10 +326,10 @@ export default function AdminAuth() {
                 <input
                   type="text"
                   required
-                  placeholder={isOwnerPath ? "owner@mess.com or developer_username" : "admin@mess.com or staff_user"}
+                  placeholder="admin@mess.com or staff_user"
                   value={usernameOrEmail}
                   onChange={(e) => setUsernameOrEmail(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 outline-none font-medium ${isOwnerPath ? 'focus:ring-amber-500' : 'focus:ring-emerald-600'}`}
+                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-600 outline-none font-medium"
                 />
               </div>
             </div>
@@ -196,7 +344,7 @@ export default function AdminAuth() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={`w-full pl-10 pr-11 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 outline-none font-medium ${isOwnerPath ? 'focus:ring-amber-500' : 'focus:ring-emerald-600'}`}
+                  className="w-full pl-10 pr-11 py-3 border border-slate-300 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-600 outline-none font-medium"
                 />
                 <button
                   type="button"
@@ -212,16 +360,28 @@ export default function AdminAuth() {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full py-3.5 text-white font-extrabold rounded-2xl text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
-                isOwnerPath
-                  ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/10'
-                  : 'bg-emerald-600 hover:bg-emerald-700'
-              }`}
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              {loading ? 'Authenticating...' : (isOwnerPath ? 'Sign In to Developer Panel' : 'Sign In to Canteen Control')}
+              {loading ? 'Authenticating...' : 'Sign In to Canteen Control'}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+        )}
+
+        {!setupToken && (
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegisterMode(!isRegisterMode);
+                setErrorMsg('');
+                setInfoMsg('');
+              }}
+              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline transition-colors cursor-pointer"
+            >
+              {isRegisterMode ? 'Already have an account? Sign In' : 'Need an account? Sign Up here'}
+            </button>
+          </div>
         )}
 
       </div>

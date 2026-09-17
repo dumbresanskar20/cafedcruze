@@ -18,7 +18,7 @@ const initSocketIO = (io) => {
     try {
       const decoded = jwt.verify(rawToken, process.env.JWT_SECRET || 'super_secret_jwt_access_key_change_in_production');
       socket.user = decoded;
-      if (['super_admin', 'staff'].includes(decoded.role)) {
+      if (['super_admin', 'admin', 'staff'].includes(decoded.role)) {
         socket.userType = 'admin';
       } else if (decoded.role === 'student') {
         socket.userType = 'student';
@@ -34,7 +34,14 @@ const initSocketIO = (io) => {
   io.on('connection', (socket) => {
     console.log(`[Socket.IO] Client connected: ${socket.id} (Type: ${socket.userType || 'anonymous'})`);
 
-    // Kitchen Screen Subscription (strictly for authenticated admins)
+    // Automatically join kitchen room for authenticated admin / staff connections
+    if (socket.userType === 'admin') {
+      socket.join('kitchen');
+      console.log(`[Socket.IO] Admin socket ${socket.id} (${socket.user?.username || 'admin'}) auto-joined 'kitchen'`);
+      socket.emit('joined:kitchen', { success: true, message: 'Subscribed to live kitchen order stream.' });
+    }
+
+    // Kitchen Screen Subscription (explicit listener)
     socket.on('join:kitchen', () => {
       if (socket.userType === 'admin') {
         socket.join('kitchen');
@@ -52,6 +59,25 @@ const initSocketIO = (io) => {
         socket.join(`student:${targetId}`);
         console.log(`[Socket.IO] Student socket ${socket.id} joined room 'student:${targetId}'`);
       }
+    });
+
+    // Parcel Preparation Timer Events (Admin <-> Student real-time sync)
+    socket.on('order:timer_set', (data) => {
+      console.log(`[Socket.IO] Parcel timer set: Order #${data?.token_number || data?.orderId} for ${data?.minutes}m`);
+      io.to('kitchen').emit('parcel:timer_updated', data);
+      if (data?.studentId) {
+        io.to(`student:${data.studentId}`).emit('parcel:timer_updated', data);
+      }
+      io.emit('order:timer_broadcast', data);
+    });
+
+    socket.on('order:timer_cleared', (data) => {
+      console.log(`[Socket.IO] Parcel timer cleared for Order #${data?.orderId}`);
+      io.to('kitchen').emit('parcel:timer_cleared', data);
+      if (data?.studentId) {
+        io.to(`student:${data.studentId}`).emit('parcel:timer_cleared', data);
+      }
+      io.emit('order:timer_cleared_broadcast', data);
     });
 
     socket.on('disconnect', () => {

@@ -4,14 +4,23 @@ node_modules/
 
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 
-# Build outputs
+# Build outputs & archives
 dist/
 build/
 out/
+*.zip
+*.tar.gz
+*.tgz
+
+# Built Android binaries (except public direct download)
+*.apk
+!student-app/public/*.apk
+
+# Temporary Vite build files
+vite.config.js.timestamp*
 
 # Logs
 *.log
@@ -26,3 +35,4 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
