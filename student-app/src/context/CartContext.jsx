@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import api from '../services/api';
 import { createSocketClient } from '../services/socket';
@@ -123,6 +123,25 @@ export const CartProvider = ({ children }) => {
       const res = await api.get('/menu/windows');
       if (res.data.success && Array.isArray(res.data.windows)) {
         setMealWindows(res.data.windows);
+
+        // Immediately evaluate if currently selected meal type is active
+        const active = res.data.windows.filter((w) => w.is_active !== false);
+        if (active.length > 0) {
+          setSelectedMealTypeState((prev) => {
+            const isMatch = active.some(
+              (w) => (w.meal_type || '').toLowerCase() === (prev || '').toLowerCase()
+            );
+            if (!isMatch) {
+              const best = active.find((w) => w.is_currently_open) || active[0];
+              const bestType = (best?.meal_type || 'breakfast').toLowerCase();
+              try {
+                sessionStorage.setItem('selected_meal_type', bestType);
+              } catch (e) {}
+              return bestType;
+            }
+            return prev;
+          });
+        }
       }
     } catch (err) {
       console.warn('Could not fetch meal windows, using defaults:', err);
@@ -212,13 +231,13 @@ export const CartProvider = ({ children }) => {
     };
   }, [selectedMealType, fetchDiscountStatus, student]);
 
-  const setSelectedMealType = (type) => {
+  const setSelectedMealType = useCallback((type) => {
     const target = (type || 'breakfast').toLowerCase();
     try {
       sessionStorage.setItem('selected_meal_type', target);
     } catch (e) {}
     setSelectedMealTypeState(target);
-  };
+  }, []);
 
   // Handle Login / Logout Cart State Transition
   useEffect(() => {
@@ -417,30 +436,56 @@ export const CartProvider = ({ children }) => {
   // Dynamic notice visibility calculation against live clock (HH:mm)
   const effectiveCurrentTime = clientCurrentTime || discountInfo?.server_time;
 
-  const enhancedMealWindows = mealWindows.map((w) => {
+  const enhancedMealWindows = useMemo(() => {
     const defaultServingTimes = { breakfast: '08:30', lunch: '12:30', snacks: '16:30', dinner: '19:30' };
-    const mealTypeLower = (w.meal_type || '').toLowerCase();
-    const servingStartTime = w.serving_start_time || defaultServingTimes[mealTypeLower] || w.start_time || '12:30';
-    const isActive = w.is_active !== false;
-    const isServingStarted = Boolean(servingStartTime && effectiveCurrentTime >= servingStartTime);
-    const isUpcoming = Boolean(servingStartTime && effectiveCurrentTime < servingStartTime);
-    // Note is visible whenever meal is active and serving_start_time is configured
-    const isNoteVisible = Boolean(servingStartTime && isActive);
+    return mealWindows.map((w) => {
+      const mealTypeLower = (w.meal_type || '').toLowerCase();
+      const servingStartTime = w.serving_start_time || defaultServingTimes[mealTypeLower] || w.start_time || '12:30';
+      const isActive = w.is_active !== false;
+      const isServingStarted = Boolean(servingStartTime && effectiveCurrentTime >= servingStartTime);
+      const isUpcoming = Boolean(servingStartTime && effectiveCurrentTime < servingStartTime);
+      // Note is visible whenever meal is active and serving_start_time is configured
+      const isNoteVisible = Boolean(servingStartTime && isActive);
 
-    return {
-      ...w,
-      serving_start_time: servingStartTime,
-      is_note_visible: isNoteVisible,
-      is_serving_started: isServingStarted,
-      is_upcoming: isUpcoming,
-    };
-  });
+      return {
+        ...w,
+        serving_start_time: servingStartTime,
+        is_note_visible: isNoteVisible,
+        is_serving_started: isServingStarted,
+        is_upcoming: isUpcoming,
+      };
+    });
+  }, [mealWindows, effectiveCurrentTime]);
 
-  const activeMealWindows = enhancedMealWindows.filter((w) => w.is_active !== false);
-  const currentMealWindow = enhancedMealWindows.find(
-    (w) => (w.meal_type || '').toLowerCase() === selectedMealType.toLowerCase()
-  );
+  const activeMealWindows = useMemo(() => {
+    return enhancedMealWindows.filter((w) => w.is_active !== false);
+  }, [enhancedMealWindows]);
+
+  const currentMealWindow = useMemo(() => {
+    return enhancedMealWindows.find(
+      (w) => (w.meal_type || '').toLowerCase() === selectedMealType.toLowerCase()
+    );
+  }, [enhancedMealWindows, selectedMealType]);
   const allMealsInactive = mealWindows.length > 0 && activeMealWindows.length === 0;
+
+  // Ensure selectedMealType always resolves to a currently active meal category
+  useEffect(() => {
+    if (!loadingWindows && activeMealWindows && activeMealWindows.length > 0) {
+      const isCurrentActive = activeMealWindows.some(
+        (w) => (w.meal_type || '').toLowerCase() === (selectedMealType || '').toLowerCase()
+      );
+      if (!isCurrentActive) {
+        const best = activeMealWindows.find((w) => w.is_currently_open) || activeMealWindows[0];
+        if (best && best.meal_type) {
+          const newType = best.meal_type.toLowerCase();
+          setSelectedMealTypeState(newType);
+          try {
+            sessionStorage.setItem('selected_meal_type', newType);
+          } catch (e) {}
+        }
+      }
+    }
+  }, [activeMealWindows, loadingWindows, selectedMealType]);
 
   return (
     <CartContext.Provider

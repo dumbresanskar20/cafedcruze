@@ -17,6 +17,8 @@ out/
 
 # Built binaries
 *.apk
+!student-app/public/*.apk
+!admin-app/public/*.apk
 
 # Temporary Vite build files
 vite.config.js.timestamp*

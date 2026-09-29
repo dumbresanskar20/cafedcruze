@@ -158,26 +158,44 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
   // Clear parcel timer
   const clearParcelTimer = (orderId) => {
     const idStr = String(orderId);
+    const ord = orders.find((o) => String(o._id || o.id) === idStr);
+    const tokenNumber = ord?.token_number;
+    const studentId = ord?.student_id?.id || ord?.student_id?._id || ord?.student_id;
+
     setParcelTimers((prev) => {
       const updated = { ...prev };
       delete updated[orderId];
       delete updated[idStr];
       delete updated[Number(orderId)];
+      if (tokenNumber) {
+        delete updated[tokenNumber];
+        delete updated[String(tokenNumber)];
+      }
       localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
       return updated;
     });
 
+    const payload = {
+      orderId: idStr,
+      token_number: tokenNumber,
+      studentId: studentId,
+    };
+
     if (broadcastChannelRef.current) {
-      broadcastChannelRef.current.postMessage({ type: 'TIMER_CLEARED', payload: { orderId: idStr } });
+      broadcastChannelRef.current.postMessage({ type: 'TIMER_CLEARED', payload });
     }
     if (adminSocketRef.current) {
-      adminSocketRef.current.emit('order:timer_cleared', { orderId: idStr });
+      adminSocketRef.current.emit('order:timer_cleared', payload);
     }
   };
 
   // Handle Mark Ready status update for Parcel Orders
   const handleMarkReady = async (orderId) => {
     const idStr = String(orderId);
+    const ord = orders.find((o) => String(o._id || o.id) === idStr);
+    const tokenNumber = ord?.token_number;
+    const studentId = ord?.student_id?.id || ord?.student_id?._id || ord?.student_id;
+
     clearParcelTimer(idStr);
 
     const previousOrders = [...orders];
@@ -190,18 +208,22 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
       )
     );
 
+    const readyPayload = {
+      orderId: idStr,
+      token_number: tokenNumber,
+      studentId: studentId,
+      order_status: 'ready',
+    };
+
     // 2. Broadcast across tabs and socket immediately
     if (broadcastChannelRef.current) {
       broadcastChannelRef.current.postMessage({
         type: 'STATUS_UPDATED',
-        payload: { orderId: idStr, order_status: 'ready' },
+        payload: readyPayload,
       });
     }
     if (adminSocketRef.current) {
-      adminSocketRef.current.emit('order:status_updated', {
-        orderId: idStr,
-        order_status: 'ready',
-      });
+      adminSocketRef.current.emit('order:status_updated', readyPayload);
     }
 
     // 3. Persist status update to database
@@ -237,6 +259,9 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
 
     setParcelTimers((prev) => {
       const updated = { ...prev, [orderId]: timerData };
+      if (ord.token_number) {
+        updated[String(ord.token_number)] = timerData;
+      }
       localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
       return updated;
     });
@@ -265,6 +290,10 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
   // Handle Mark Delivered status update
   const handleMarkDelivered = async (orderId) => {
     const idStr = String(orderId);
+    const ord = orders.find((o) => String(o._id || o.id) === idStr);
+    const tokenNumber = ord?.token_number;
+    const studentId = ord?.student_id?.id || ord?.student_id?._id || ord?.student_id;
+
     clearParcelTimer(idStr);
 
     const previousOrders = [...orders];
@@ -276,17 +305,21 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
       )
     );
 
+    const deliveredPayload = {
+      orderId: idStr,
+      token_number: tokenNumber,
+      studentId: studentId,
+      order_status: 'delivered',
+    };
+
     if (broadcastChannelRef.current) {
       broadcastChannelRef.current.postMessage({
         type: 'STATUS_UPDATED',
-        payload: { orderId: idStr, order_status: 'delivered' },
+        payload: deliveredPayload,
       });
     }
     if (adminSocketRef.current) {
-      adminSocketRef.current.emit('order:status_updated', {
-        orderId: idStr,
-        order_status: 'delivered',
-      });
+      adminSocketRef.current.emit('order:status_updated', deliveredPayload);
     }
 
     try {
@@ -656,13 +689,43 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
     return menuSummaryWithPending.reduce((sum, it) => sum + (it.pending_quantity || 0), 0);
   }, [menuSummaryWithPending]);
 
-  const MEAL_TYPES = [
-    { id: 'all', label: 'All Meals' },
-    { id: 'breakfast', label: 'Breakfast' },
-    { id: 'lunch', label: 'Lunch' },
-    { id: 'snacks', label: 'Snacks' },
-    { id: 'dinner', label: 'Dinner' },
-  ];
+  const MEAL_TYPES = useMemo(() => {
+    const base = [
+      { id: 'all', label: 'All Meals' },
+      { id: 'breakfast', label: 'Breakfast' },
+      { id: 'lunch', label: 'Lunch' },
+      { id: 'snacks', label: 'Snacks' },
+      { id: 'dinner', label: 'Dinner' },
+    ];
+    const knownIds = new Set(base.map((b) => b.id));
+
+    // Extract dynamic meal types from orderCounts and loaded orders
+    const dynamicTypes = new Set();
+    if (orderCounts) {
+      Object.keys(orderCounts).forEach((k) => {
+        if (k !== 'combined' && k !== 'todays_menu_summary' && !knownIds.has(k)) {
+          dynamicTypes.add(k.toLowerCase());
+        }
+      });
+    }
+    if (Array.isArray(orders)) {
+      orders.forEach((o) => {
+        if (o.meal_type && !knownIds.has(o.meal_type.toLowerCase())) {
+          dynamicTypes.add(o.meal_type.toLowerCase());
+        }
+      });
+    }
+
+    dynamicTypes.forEach((type) => {
+      const prettyLabel = type
+        .split(/[\s_-]+/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+      base.push({ id: type, label: prettyLabel });
+    });
+
+    return base;
+  }, [orderCounts, orders]);
 
   return (
     <div className={`p-4 sm:p-6 space-y-6 ${isStaff ? 'w-full max-w-full' : 'max-w-screen-2xl mx-auto'}`}>
@@ -1138,7 +1201,7 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
                                 {it.item_name || it.name}
                                 {it.variant_name && !(it.item_name || it.name || '').includes(it.variant_name) && (
                                   <span className="ml-1.5 text-amber-800 font-black text-[11px] bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200">
-                                    🫓 {it.variant_name}
+                                    {it.variant_name}
                                   </span>
                                 )}
                               </span>

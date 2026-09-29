@@ -26,11 +26,17 @@ const DEFAULT_SERVING_START_TIMES = {
 };
 
 const computeMealStatus = (w, currentTime = getCurrentTimeHHMM()) => {
-  const isActive = w.is_active !== false;
+  const isActive = Boolean(
+    w.is_active === 1 ||
+    w.is_active === true ||
+    w.is_active === '1' ||
+    (w.is_active !== 0 && w.is_active !== '0' && w.is_active !== false)
+  );
+  const isFullDay = Boolean(w.is_full_day === 1 || w.is_full_day === true || w.is_full_day === '1');
   let isCurrentlyOpen = false;
 
   if (isActive) {
-    if (w.is_full_day === true) {
+    if (isFullDay) {
       isCurrentlyOpen = true;
     } else {
       isCurrentlyOpen = Boolean(
@@ -213,7 +219,9 @@ const getMenuItems = async (req, res) => {
       windowMap[w.meal_type.toLowerCase()] = computeMealStatus(w, currentTime);
     });
 
-    const activeTypes = ['breakfast', 'lunch', 'snacks', 'dinner'].filter(
+    const windowMealTypes = windows.map((w) => (w.meal_type || '').toLowerCase().trim()).filter(Boolean);
+    const combinedTypes = Array.from(new Set([...['breakfast', 'lunch', 'snacks', 'dinner'], ...windowMealTypes]));
+    const activeTypes = combinedTypes.filter(
       (t) => (windowMap[t] ? windowMap[t].is_active : true)
     );
 

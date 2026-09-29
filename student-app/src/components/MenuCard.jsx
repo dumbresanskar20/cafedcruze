@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Check, Flame, Clock, Star, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -73,6 +74,11 @@ export default function MenuCard({ item, isCurrentlyOpen = true }) {
 
   const handleConfirmVariant = () => {
     if (!selectedVariant) return;
+    if (!isCurrentlyOpen || !isInStock) return;
+    if (!isAuthenticated) {
+      openAuthModal(false, 'login');
+      return;
+    }
     const success = addToCart(item, 1, selectedVariant);
     if (success !== false) {
       setAdded(true);
@@ -173,25 +179,7 @@ export default function MenuCard({ item, isCurrentlyOpen = true }) {
             {item.name}
           </h3>
 
-          {hasItemVariants && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {item.variants.map((v, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedVariant(v);
-                    setIsVariantModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1 text-[11px] font-extrabold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/90 px-2.5 py-1 rounded-xl shadow-2xs transition-all cursor-pointer hover:scale-105"
-                >
-                  <span>🫓 {v.name}:</span>
-                  <span className="text-emerald-700 font-black">₹{v.price}</span>
-                </button>
-              ))}
-            </div>
-          )}
+
 
           <p className="text-xs text-stone-500 mt-1.5 line-clamp-2 leading-relaxed font-medium">
             {item.description || 'Piping hot authentic preparation cooked fresh in the campus kitchen.'}
@@ -259,9 +247,12 @@ export default function MenuCard({ item, isCurrentlyOpen = true }) {
         </div>
       </div>
 
-      {/* Chapati Quantity Selection Modal */}
-      {isVariantModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in">
+      {/* Quantity Selection Modal - Portal to document.body to break out of card CSS transform & overflow */}
+      {isVariantModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          onClick={() => setIsVariantModalOpen(false)}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in"
+        >
           <div
             onClick={(e) => e.stopPropagation()}
             className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-5 animate-in zoom-in-95 duration-200 text-left"
@@ -281,8 +272,7 @@ export default function MenuCard({ item, isCurrentlyOpen = true }) {
                     {item.name}
                   </h3>
                   <p className="text-xs text-brand-orange font-bold flex items-center gap-1">
-                    <span>🫓</span>
-                    <span>Select Chapati Quantity ({item.meal_type ? item.meal_type.toUpperCase() : 'MEAL'})</span>
+                    <span>Select Quantity ({item.meal_type ? item.meal_type.toUpperCase() : 'PORTION'})</span>
                   </p>
                 </div>
               </div>
@@ -298,7 +288,7 @@ export default function MenuCard({ item, isCurrentlyOpen = true }) {
             {/* Options Selection Cards */}
             <div className="space-y-2.5">
               <label className="block text-xs font-black uppercase tracking-wider text-stone-600">
-                Choose Portion / Chapati Quantity:
+                Choose Quantity / Portion:
               </label>
 
               {item.variants.map((v) => {
@@ -330,12 +320,7 @@ export default function MenuCard({ item, isCurrentlyOpen = true }) {
 
                       <div>
                         <span className="font-extrabold text-sm text-brand-dark block">
-                          🫓 {v.name}
-                        </span>
-                        <span className="text-[11px] text-stone-500 font-medium">
-                          {Number(v.quantity) > 0
-                            ? `${v.quantity} hot chapatis served with homestyle bhaji`
-                            : 'Served fresh with homestyle bhaji'}
+                          {v.name}
                         </span>
                       </div>
                     </div>
@@ -394,12 +379,20 @@ export default function MenuCard({ item, isCurrentlyOpen = true }) {
               >
                 <Plus className="w-4 h-4" />
                 <span>
-                  Add {selectedVariant ? `${selectedVariant.name} • ₹${selectedVariant.price}` : 'to Tray'}
+                  Add{' '}
+                  {selectedVariant
+                    ? `${selectedVariant.name} • ₹${
+                        discountInfo?.is_discount_active && Number(discountInfo?.discount_percentage) > 0
+                          ? Math.max(0, Math.round(Number(selectedVariant.price) * (1 - Number(discountInfo.discount_percentage) / 100)))
+                          : selectedVariant.price
+                      }`
+                    : 'to Tray'}
                 </span>
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

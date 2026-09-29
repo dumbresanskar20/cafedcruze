@@ -1,17 +1,18 @@
 /**
- * MealBook Image Cache Utility
- * Persists downloaded menu images in browser CacheStorage & Memory for a maximum of 1 day (24 hours).
+ * MealBook Image Cache Utility (Student App)
+ * Persists downloaded menu images PERMANENTLY in browser CacheStorage & Memory.
+ * Images remain stored until the browser/app cache is explicitly cleared.
  * Enables instant display of menu images across logins, app reloads, and navigation without re-downloading.
  */
 
 import { useState, useEffect } from 'react';
 
-// Maximum cache retention: 1 Day (24 hours in milliseconds)
+// Retained for backward-compatibility if referenced
 export const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const CACHE_NAME = 'mealbook-image-cache-v1';
 const META_KEY = 'mealbook_img_cache_meta_v1';
 
-// L1 In-Memory Cache (Instant synchronous access during active session)
+// L1 In-Memory Cache (Instant synchronous access during active session: url -> blobUrl)
 const memoryCache = new Map();
 
 // In-flight fetch deduplication to avoid duplicate concurrent network requests
@@ -58,42 +59,31 @@ function removeMetaTimestamp(url) {
 }
 
 /**
- * Clean up expired cached images (older than 1 day)
+ * Clean up expired cached images - Kept for backward compatibility.
+ * Images are now stored permanently until the user/browser clears the cache.
  */
 export async function cleanExpiredImageCache() {
-  if (typeof window === 'undefined' || !('caches' in window)) return;
+  // Permanent cache: no automatic 1-day expiration deletion
+  return Promise.resolve();
+}
 
+/**
+ * Explicitly clear all cached images from Memory, CacheStorage, and localStorage
+ */
+export async function clearImageCache() {
   try {
-    const now = Date.now();
-    const meta = getMetaTimestamps();
-    const cache = await caches.open(CACHE_NAME);
-    const keys = await cache.keys();
-    let updatedMeta = { ...meta };
-    let hasChanges = false;
-
-    for (const request of keys) {
-      const url = request.url;
-      const cachedAt = meta[url] || 0;
-
-      if (!cachedAt || now - cachedAt > ONE_DAY_MS) {
-        await cache.delete(request);
-        if (updatedMeta[url]) {
-          delete updatedMeta[url];
-          hasChanges = true;
-        }
-      }
+    memoryCache.clear();
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      await caches.delete(CACHE_NAME);
     }
-
-    if (hasChanges) {
-      localStorage.setItem(META_KEY, JSON.stringify(updatedMeta));
-    }
+    localStorage.removeItem(META_KEY);
   } catch (err) {
-    console.warn('[ImageCache] Auto-cleanup error:', err);
+    console.warn('[ImageCache] Error clearing image cache:', err);
   }
 }
 
 /**
- * Get cached image URL (returns Blob URL from memory/CacheStorage if valid within 1 day)
+ * Get cached image URL (returns Blob URL from memory/CacheStorage permanently)
  * @param {string} url - Image URL to retrieve or download
  * @returns {Promise<string>} - Resolves to cached blob URL or original URL
  */
@@ -105,12 +95,10 @@ export async function getCachedImageUrl(url) {
     return url;
   }
 
-  const now = Date.now();
-
-  // 1. Check L1 In-Memory Cache
-  const memEntry = memoryCache.get(url);
-  if (memEntry && memEntry.expiresAt > now) {
-    return memEntry.blobUrl;
+  // 1. Check L1 In-Memory Cache (Instant permanent access for this session)
+  const memBlobUrl = memoryCache.get(url);
+  if (memBlobUrl) {
+    return memBlobUrl;
   }
 
   // 2. Check if a request is already in-flight for this exact URL
@@ -126,27 +114,12 @@ export async function getCachedImageUrl(url) {
         const cache = await caches.open(CACHE_NAME);
         const cachedResponse = await cache.match(url);
 
+        // Found in CacheStorage -> return blob permanently (no 1-day expiry)
         if (cachedResponse) {
-          const meta = getMetaTimestamps();
-          let cachedAt = meta[url];
-
-          // Check custom header if metadata missing
-          if (!cachedAt) {
-            const headerVal = cachedResponse.headers.get('X-MealBook-Cached-At');
-            if (headerVal) cachedAt = parseInt(headerVal, 10);
-          }
-
-          // If still fresh (<= 1 day old), return cached blob
-          if (cachedAt && now - cachedAt <= ONE_DAY_MS) {
-            const blob = await cachedResponse.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            memoryCache.set(url, { blobUrl, expiresAt: cachedAt + ONE_DAY_MS });
-            return blobUrl;
-          } else {
-            // Expired (> 1 day), delete stale entry
-            await cache.delete(url);
-            removeMetaTimestamp(url);
-          }
+          const blob = await cachedResponse.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          memoryCache.set(url, blobUrl);
+          return blobUrl;
         }
 
         // Fetch fresh copy over network
@@ -154,6 +127,7 @@ export async function getCachedImageUrl(url) {
         if (response.ok) {
           const blob = await response.blob();
           const headers = new Headers(response.headers);
+          const now = Date.now();
           headers.set('X-MealBook-Cached-At', String(now));
           headers.set('Content-Type', blob.type || 'image/jpeg');
 
@@ -163,11 +137,12 @@ export async function getCachedImageUrl(url) {
             headers,
           });
 
+          // Store permanently in browser CacheStorage
           await cache.put(url, responseToCache);
           setMetaTimestamp(url, now);
 
           const blobUrl = URL.createObjectURL(blob);
-          memoryCache.set(url, { blobUrl, expiresAt: now + ONE_DAY_MS });
+          memoryCache.set(url, blobUrl);
           return blobUrl;
         }
       }
@@ -187,7 +162,7 @@ export async function getCachedImageUrl(url) {
 }
 
 /**
- * Preload multiple images into cache in the background
+ * Preload multiple images into permanent cache in the background
  * @param {string[]} urls - List of image URLs to cache
  */
 export function preloadImages(urls = []) {
@@ -204,30 +179,28 @@ export function preloadImages(urls = []) {
 }
 
 /**
- * React Hook for using 1-day cached image URLs in components
+ * React Hook for using permanently cached image URLs in components
  * @param {string} src - Image URL
  * @returns {{ displaySrc: string, loading: boolean, isCached: boolean }}
  */
 export function useCachedImage(src) {
   const [displaySrc, setDisplaySrc] = useState(() => {
     if (!src) return '';
-    const mem = memoryCache.get(src);
-    if (mem && mem.expiresAt > Date.now()) {
-      return mem.blobUrl;
+    const memBlob = memoryCache.get(src);
+    if (memBlob) {
+      return memBlob;
     }
     return src;
   });
 
   const [loading, setLoading] = useState(() => {
     if (!src) return false;
-    const mem = memoryCache.get(src);
-    return !(mem && mem.expiresAt > Date.now());
+    return !memoryCache.has(src);
   });
 
   const [isCached, setIsCached] = useState(() => {
     if (!src) return false;
-    const mem = memoryCache.get(src);
-    return Boolean(mem && mem.expiresAt > Date.now());
+    return memoryCache.has(src);
   });
 
   useEffect(() => {
@@ -239,9 +212,9 @@ export function useCachedImage(src) {
     }
 
     // If already in L1 memory cache, resolve immediately
-    const mem = memoryCache.get(src);
-    if (mem && mem.expiresAt > Date.now()) {
-      setDisplaySrc(mem.blobUrl);
+    const memBlob = memoryCache.get(src);
+    if (memBlob) {
+      setDisplaySrc(memBlob);
       setLoading(false);
       setIsCached(true);
       return;
@@ -269,11 +242,4 @@ export function useCachedImage(src) {
   }, [src]);
 
   return { displaySrc, loading, isCached };
-}
-
-// Auto-run cleanup of expired cache entries on module load
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    cleanExpiredImageCache();
-  }, 3000);
 }

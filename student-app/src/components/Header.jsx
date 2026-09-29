@@ -1,14 +1,61 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, User, LogOut, Receipt, ChevronDown, KeyRound } from 'lucide-react';
+import { ShoppingBag, User, LogOut, Receipt, ChevronDown, KeyRound, Download } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import CAFE_D_CRUZE_LOGO from '../assets/logo';
+
+// Helper to detect Android operating system
+const isAndroidDevice = () => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = (navigator.userAgent || navigator.vendor || window.opera || '').toLowerCase();
+  const platform = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+  return ua.includes('android') || platform.includes('android');
+};
+
+// Helper to detect if running inside native app / WebView wrapper / standalone PWA
+const isNativeOrAppEnvironment = () => {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
+      return true;
+    }
+  } catch (e) {
+    // Ignore Capacitor lookup errors
+  }
+  const ua = (navigator.userAgent || navigator.vendor || window.opera || '').toLowerCase();
+  return (
+    ua.includes('wv') ||
+    (ua.includes('android') && ua.includes('version/')) ||
+    ua.includes('mobile_app') ||
+    window.Android !== undefined ||
+    window.ReactNativeWebView !== undefined ||
+    (window.webkit && window.webkit.messageHandlers !== undefined) ||
+    Boolean(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    window.navigator.standalone === true
+  );
+};
 
 export default function Header({ onOpenOrders }) {
   const { student, isAuthenticated, openAuthModal, logout } = useAuth();
   const { cartCount, setIsCartOpen, isCartBouncing } = useCart();
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [showDownloadApp, setShowDownloadApp] = useState(false);
   const dropdownRef = useRef(null);
+
+  // Detect if on Android device and browsing on website (not in native app)
+  useEffect(() => {
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const forcePreview = params && (params.get('preview_app') === 'true' || params.get('download_preview') === '1');
+
+    const isAndroid = isAndroidDevice();
+    const isApp = isNativeOrAppEnvironment();
+
+    // Only visible on website, on Android devices (and excluded inside native app)
+    if ((isAndroid && !isApp) || forcePreview) {
+      setShowDownloadApp(true);
+    }
+  }, []);
 
   // Outside click listener to auto-close user dropdown
   useEffect(() => {
@@ -49,6 +96,20 @@ export default function Header({ onOpenOrders }) {
           {/* Right Action Bar: Cart Icon & Persistent Auth Control */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             
+            {/* Android Website-Only APK Download Button */}
+            {showDownloadApp && (
+              <a
+                href="/Cafe-D-Cruze.apk"
+                download="Cafe D Cruze.apk"
+                className="inline-flex items-center gap-1 sm:gap-1.5 bg-[#0d9488] hover:bg-[#0f766e] active:bg-[#115e59] text-white font-bold text-xs sm:text-sm px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-2xl shadow-sm hover:shadow transition-all transform active:scale-95 shrink-0 cursor-pointer"
+                title="Download Cafe D Cruze Android App"
+                aria-label="Download Cafe D Cruze Android App"
+              >
+                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+                <span>Get App</span>
+              </a>
+            )}
+
             {/* Cart Tray Trigger */}
             <button
               onClick={() => setIsCartOpen(true)}

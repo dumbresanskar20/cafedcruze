@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CheckCircle2, Clock, AlertCircle, Package } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import CAFE_D_CRUZE_LOGO from '../assets/logo';
+import api from '../services/api';
 
 export default function OrderDetailModal({ order, onClose }) {
   if (!order) return null;
@@ -15,8 +16,73 @@ export default function OrderDetailModal({ order, onClose }) {
     setCurrentStatus(order.order_status || 'placed');
   }, [order.order_status]);
 
+  // Fetch true, fresh order status from backend to prevent displaying stale status
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLatestStatus = async () => {
+      try {
+        const res = await api.get('/orders/my-orders');
+        if (isMounted && res.data?.success && Array.isArray(res.data.orders)) {
+          const fresh = res.data.orders.find(
+            (o) =>
+              (orderId && String(o.id || o._id) === String(orderId)) ||
+              (order.token_number && String(o.token_number) === String(order.token_number))
+          );
+          if (fresh && fresh.order_status) {
+            setCurrentStatus(fresh.order_status);
+          }
+        }
+      } catch (err) {
+        // Fall back gracefully to currentStatus
+      }
+    };
+
+    fetchLatestStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, [orderId, order.token_number]);
+
+  // Clean up timers from localStorage if order is delivered, expired, or cancelled
+  useEffect(() => {
+    if (['delivered', 'expired', 'cancelled'].includes(currentStatus)) {
+      try {
+        const stored = localStorage.getItem('mess_parcel_timers');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          let changed = false;
+          const oid = orderId ? String(orderId) : null;
+          const tok = order.token_number ? String(order.token_number) : null;
+
+          Object.keys(parsed).forEach((k) => {
+            const item = parsed[k];
+            if (
+              (oid && (k === oid || String(item?.orderId) === oid)) ||
+              (tok && (k === tok || String(item?.token_number) === tok))
+            ) {
+              delete parsed[k];
+              changed = true;
+            }
+          });
+
+          if (changed) {
+            localStorage.setItem('mess_parcel_timers', JSON.stringify(parsed));
+          }
+        }
+      } catch (e) {
+        console.error('Error cleaning parcel timer in OrderDetailModal:', e);
+      }
+    }
+  }, [currentStatus, orderId, order.token_number]);
+
   // Parcel countdown timer and status synchronization
   useEffect(() => {
+    const isTerminalStatus = ['delivered', 'expired', 'cancelled'].includes(currentStatus);
+    if (isTerminalStatus) {
+      setTimeLeft(0);
+      return;
+    }
+
     const checkTimer = () => {
       try {
         const stored = localStorage.getItem('mess_parcel_timers');
@@ -26,7 +92,7 @@ export default function OrderDetailModal({ order, onClose }) {
           if (tData && tData.readyAt) {
             const diff = Math.max(0, Math.floor((tData.readyAt - Date.now()) / 1000));
             setTimeLeft(diff);
-            if (diff === 0 && currentStatus !== 'delivered' && currentStatus !== 'cancelled' && currentStatus !== 'expired') {
+            if (diff === 0 && !['delivered', 'cancelled', 'expired'].includes(currentStatus)) {
               setCurrentStatus('ready');
             }
             return;
@@ -47,7 +113,7 @@ export default function OrderDetailModal({ order, onClose }) {
         bc.onmessage = (event) => {
           const { type, payload } = event.data || {};
           if (
-            (payload?.orderId && payload.orderId === orderId) ||
+            (payload?.orderId && String(payload.orderId) === String(orderId)) ||
             (payload?.token_number && String(payload.token_number) === String(order.token_number))
           ) {
             if (type === 'TIMER_SET') {

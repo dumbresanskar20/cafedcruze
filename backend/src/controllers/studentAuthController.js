@@ -561,10 +561,15 @@ const googleAuthStudent = async (req, res) => {
       try {
         const { OAuth2Client } = require('google-auth-library');
         const googleClientId = process.env.GOOGLE_CLIENT_ID;
-        const client = new OAuth2Client(googleClientId);
+        const allowedAudiences = [
+          googleClientId,
+          '404710338094-k2vudlae2nql5226ru3ajlfnmhskdtru.apps.googleusercontent.com',
+          '404710338094-d5cganqkkrjn1bkptmnju0m2dmdvs5ss.apps.googleusercontent.com',
+        ].filter(Boolean);
+        const client = new OAuth2Client();
         const ticket = await client.verifyIdToken({
           idToken: credential,
-          audience: googleClientId || undefined,
+          audience: allowedAudiences,
         });
         payload = ticket.getPayload();
       } catch (clientErr) {

@@ -273,27 +273,41 @@ const createRazorpayOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Cart items are required.' });
     }
 
-    if (!meal_type || !['breakfast', 'lunch', 'dinner', 'snacks'].includes(meal_type.toLowerCase())) {
+    const incomingMealType = meal_type || (items && items[0]?.meal_type);
+    if (!incomingMealType || typeof incomingMealType !== 'string' || !incomingMealType.trim()) {
       return res.status(400).json({ success: false, message: 'Valid meal_type is required.' });
     }
 
-    const targetMealType = meal_type.toLowerCase();
+    const targetMealType = incomingMealType.toLowerCase().trim();
+    const normalizedVariants = Array.from(new Set([
+      targetMealType,
+      targetMealType.replace(/_/g, ' '),
+      targetMealType.replace(/\s+/g, '_'),
+      targetMealType.replace(/[\s_-]+/g, '_'),
+      targetMealType.replace(/[\s_-]+/g, ' '),
+    ])).filter(Boolean);
 
     // Check MealWindow status: Must be active and currently open for ordering
-    const [windowRows] = await pool.execute('SELECT * FROM MealWindow WHERE meal_type = ? LIMIT 1', [targetMealType]);
+    const placeholders = normalizedVariants.map(() => '?').join(', ');
+    const [windowRows] = await pool.execute(
+      `SELECT * FROM MealWindow WHERE LOWER(meal_type) IN (${placeholders}) LIMIT 1`,
+      normalizedVariants
+    );
     const windowDoc = windowRows[0] || null;
+    const effectiveMealType = windowDoc ? windowDoc.meal_type.toLowerCase() : targetMealType;
+
     if (windowDoc) {
       const windowStatus = computeMealStatus(windowDoc);
       if (!windowStatus.is_active) {
         return res.status(400).json({
           success: false,
-          message: `The meal category '${targetMealType.toUpperCase()}' is currently not offered by Canteen Management.`,
+          message: `The meal category '${windowDoc.meal_type.toUpperCase()}' is currently not offered by Canteen Management.`,
         });
       }
       if (!windowStatus.is_currently_open) {
         return res.status(400).json({
           success: false,
-          message: `Ordering for ${targetMealType.toUpperCase()} is currently closed. Operating window: ${windowStatus.formatted_start_time} – ${windowStatus.formatted_end_time}.`,
+          message: `Ordering for ${windowDoc.meal_type.toUpperCase()} is currently closed. Operating window: ${windowStatus.formatted_start_time} – ${windowStatus.formatted_end_time}.`,
         });
       }
     }
@@ -446,7 +460,7 @@ const createRazorpayOrder = async (req, res) => {
         receipt: `receipt_${Date.now()}`,
         notes: {
           student_id: String(studentId),
-          meal_type: targetMealType,
+          meal_type: effectiveMealType,
           subtotal_amount: String(discountInfo.subtotal_amount),
           discount_percentage: String(discountInfo.discount_percentage),
           discount_amount: String(discountInfo.discount_amount),
@@ -566,7 +580,7 @@ const verifyPaymentAndFulfill = async (req, res) => {
     }
 
     // Validate cart items to record
-    const targetMealType = (meal_type || existingOrder?.meal_type || 'lunch').toLowerCase();
+    const targetMealType = (meal_type || existingOrder?.meal_type || items?.[0]?.meal_type || 'lunch').toLowerCase();
     const cartItems = items || existingOrder?.items || [];
 
     if (!Array.isArray(cartItems) || cartItems.length === 0) {
@@ -798,11 +812,12 @@ const computeKitchenOrderCounts = async (targetDate) => {
     const count = group.count || 0;
     const isActive = activeStatuses.includes(group.order_status);
 
-    if (counts[meal]) {
-      counts[meal].total_orders_today += count;
-      if (isActive) {
-        counts[meal].active_tokens += count;
-      }
+    if (!counts[meal]) {
+      counts[meal] = { total_orders_today: 0, active_tokens: 0 };
+    }
+    counts[meal].total_orders_today += count;
+    if (isActive) {
+      counts[meal].active_tokens += count;
     }
     counts.combined.total_orders_today += count;
     if (isActive) {
@@ -1218,6 +1233,22 @@ const updateOrderStatus = async (req, res) => {
           orderId: order.id,
           token_number: order.token_number,
           order_status: order.order_status,
+        });
+
+        if (['delivered', 'expired', 'cancelled'].includes(order.order_status)) {
+          io.to(`student:${order.student.id}`).emit('parcel:timer_cleared', {
+            orderId: order.id,
+            token_number: order.token_number,
+            studentId: order.student.id,
+          });
+        }
+      }
+
+      if (['delivered', 'expired', 'cancelled'].includes(order.order_status)) {
+        io.emit('order:timer_cleared_broadcast', {
+          orderId: order.id,
+          token_number: order.token_number,
+          studentId: order.student?.id,
         });
       }
     }
@@ -1785,10 +1816,18 @@ const createManualOrder = async (req, res) => {
     const cleanCustomerName = customer_name.trim();
 
     // 2. Validate meal_type
-    if (!meal_type || !['breakfast', 'lunch', 'dinner', 'snacks'].includes(meal_type.toLowerCase())) {
-      return res.status(400).json({ success: false, message: 'Valid meal_type is required (breakfast, lunch, snacks, dinner).' });
+    const incomingMealType = meal_type || (items && items[0]?.meal_type);
+    if (!incomingMealType || typeof incomingMealType !== 'string' || !incomingMealType.trim()) {
+      return res.status(400).json({ success: false, message: 'Valid meal_type is required.' });
     }
-    const targetMealType = meal_type.toLowerCase();
+    const targetMealType = incomingMealType.toLowerCase().trim();
+    const normalizedVariants = Array.from(new Set([
+      targetMealType,
+      targetMealType.replace(/_/g, ' '),
+      targetMealType.replace(/\s+/g, '_'),
+      targetMealType.replace(/[\s_-]+/g, '_'),
+      targetMealType.replace(/[\s_-]+/g, ' '),
+    ])).filter(Boolean);
 
     // 3. Determine order_type and normalize payment_method
     const isParcelOrder = order_type === 'parcel' || Boolean(is_parcel);
@@ -1808,20 +1847,26 @@ const createManualOrder = async (req, res) => {
     }
 
     // 5. Enforce meal-window / is_currently_open checks (same rules as normal ordering)
-    const [windowRows] = await pool.execute('SELECT * FROM MealWindow WHERE meal_type = ? LIMIT 1', [targetMealType]);
+    const placeholders = normalizedVariants.map(() => '?').join(', ');
+    const [windowRows] = await pool.execute(
+      `SELECT * FROM MealWindow WHERE LOWER(meal_type) IN (${placeholders}) LIMIT 1`,
+      normalizedVariants
+    );
     const windowDoc = windowRows[0] || null;
+    const effectiveMealType = windowDoc ? windowDoc.meal_type.toLowerCase() : targetMealType;
+
     if (windowDoc) {
       const windowStatus = computeMealStatus(windowDoc);
       if (!windowStatus.is_active) {
         return res.status(400).json({
           success: false,
-          message: `The meal category '${targetMealType.toUpperCase()}' is currently deactivated.`,
+          message: `The meal category '${windowDoc.meal_type.toUpperCase()}' is currently deactivated.`,
         });
       }
       if (!windowStatus.is_currently_open) {
         return res.status(400).json({
           success: false,
-          message: `Ordering for ${targetMealType.toUpperCase()} is currently closed. Operating window: ${windowStatus.formatted_start_time} – ${windowStatus.formatted_end_time}.`,
+          message: `Ordering for ${windowDoc.meal_type.toUpperCase()} is currently closed. Operating window: ${windowStatus.formatted_start_time} – ${windowStatus.formatted_end_time}.`,
         });
       }
     }
@@ -1988,7 +2033,7 @@ const createManualOrder = async (req, res) => {
     try {
       await connection.beginTransaction();
 
-      const { tokenNumber, sequenceNumber } = await generateTokenNumber(targetMealType, todayDate, connection);
+      const { tokenNumber, sequenceNumber } = await generateTokenNumber(effectiveMealType, todayDate, connection);
       finalTokenNumber = tokenNumber;
       finalSeqNumber = sequenceNumber;
 
@@ -2002,7 +2047,7 @@ const createManualOrder = async (req, res) => {
         [
           effectiveStudentId,
           cleanCustomerName,
-          targetMealType,
+          effectiveMealType,
           discountInfo.subtotal_amount,
           discountInfo.discount_percentage,
           discountInfo.discount_amount,

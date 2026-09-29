@@ -42,6 +42,14 @@ export default function ManualOrderModal({ isOpen, onClose, onOrderCreated, prin
   });
   const [linkedStudentId, setLinkedStudentId] = useState('');
 
+  const availableMealTypes = React.useMemo(() => {
+    if (Array.isArray(mealWindows) && mealWindows.length > 0) {
+      const types = mealWindows.map((w) => (w.meal_type || '').toLowerCase().trim()).filter(Boolean);
+      return Array.from(new Set(types));
+    }
+    return ['breakfast', 'lunch', 'snacks', 'dinner'];
+  }, [mealWindows]);
+
   // Success state after creation
   const [createdOrder, setCreatedOrder] = useState(null);
 
@@ -424,8 +432,8 @@ export default function ManualOrderModal({ isOpen, onClose, onOrderCreated, prin
                 )}
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {['breakfast', 'lunch', 'snacks', 'dinner'].map((type) => {
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                {availableMealTypes.map((type) => {
                   const windowInfo = mealWindows.find((w) => w.meal_type?.toLowerCase() === type);
                   const isCurrentlyOpen = windowInfo ? windowInfo.is_currently_open : true;
                   const isSelected = selectedMeal === type;
@@ -506,10 +514,9 @@ export default function ManualOrderModal({ isOpen, onClose, onOrderCreated, prin
                           <div className="flex items-center justify-between gap-2">
                             <div>
                               <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                                <span>🫓</span>
                                 <span>{item.name}</span>
                               </h4>
-                              <p className="text-[10px] text-amber-800 font-semibold">Select Chapati Quantity:</p>
+                              <p className="text-[10px] text-amber-800 font-semibold">Select Quantity / Portion:</p>
                             </div>
                             {isOutOfStock && (
                               <span className="text-[10px] text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded">

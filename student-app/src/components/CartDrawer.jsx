@@ -87,13 +87,13 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
       // 2. Request backend Razorpay Order creation (Backend creates order with live .env credentials)
       console.log('[Razorpay Diagnostics] 2. Calling backend /orders/create-razorpay-order...', {
         itemsCount: cartItems.length,
-        meal_type: selectedMealType,
+        meal_type: selectedMealType || cartItems[0]?.meal_type || 'lunch',
         cartTotal,
       });
 
       const res = await api.post('/orders/create-razorpay-order', {
         items: cartItems,
-        meal_type: selectedMealType,
+        meal_type: selectedMealType || cartItems[0]?.meal_type || 'lunch',
         order_type: isParcel ? 'parcel' : 'dine_in',
         is_parcel: isParcel,
       });
@@ -132,7 +132,7 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
               razorpay_payment_id: response.razorpay_payment_id || `pay_mock_${Date.now()}`,
               razorpay_signature: response.razorpay_signature || 'mock_signature',
               items: cartItems,
-              meal_type: selectedMealType,
+              meal_type: selectedMealType || cartItems[0]?.meal_type || 'lunch',
               order_type: isParcel ? 'parcel' : 'dine_in',
               is_parcel: isParcel,
             });
@@ -234,7 +234,7 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
               razorpay_payment_id: `pay_sandbox_${Date.now()}`,
               razorpay_signature: 'sandbox_test_sig',
               items: cartItems,
-              meal_type: selectedMealType,
+              meal_type: selectedMealType || cartItems[0]?.meal_type || 'lunch',
             });
 
             if (verifyRes.data.success) {
@@ -419,7 +419,7 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
                     </h4>
                     {item.variant_name && (
                       <span className="inline-block text-[10px] font-extrabold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-md border border-amber-200 mt-0.5">
-                        🫓 {item.variant_name}
+                        {item.variant_name}
                       </span>
                     )}
                     <p className="text-xs font-display font-extrabold text-brand-orange mt-1">₹{item.price}</p>

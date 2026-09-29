@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Check, Image as ImageIcon, Upload, AlertCircle, AlertTriangle, Search, ChevronDown, Clock, Sparkles } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Check, Image as ImageIcon, Upload, AlertCircle, AlertTriangle, Search, ChevronDown, Clock, Sparkles, Layers } from 'lucide-react';
 import api from '../services/api';
 import CachedImage from './CachedImage';
 import { preloadImages } from '../utils/imageCache';
@@ -26,12 +26,9 @@ export default function MenuManagement() {
   const [isActive, setIsActive] = useState(true);
   const [togglingIds, setTogglingIds] = useState(new Set());
 
-  // Chapati / Quantity Variant States
+  // Quantity Variant States
   const [hasVariants, setHasVariants] = useState(false);
-  const [variants, setVariants] = useState([
-    { id: '2_chapati', name: '2 Chapati', quantity: 2, price: '' },
-    { id: '3_chapati', name: '3 Chapati', quantity: 3, price: '' },
-  ]);
+  const [variants, setVariants] = useState([]);
 
   // Modal State for Creating New Meal Type
   const [isNewMealTypeModalOpen, setIsNewMealTypeModalOpen] = useState(false);
@@ -130,10 +127,7 @@ export default function MenuManagement() {
     setIsActive(true);
     setRecipeItems([]);
     setHasVariants(false);
-    setVariants([
-      { id: '2_chapati', name: '2 Chapati', quantity: 2, price: '' },
-      { id: '3_chapati', name: '3 Chapati', quantity: 3, price: '' },
-    ]);
+    setVariants([]);
     setIsModalOpen(true);
   };
 
@@ -151,18 +145,15 @@ export default function MenuManagement() {
     setHasVariants(Boolean(item.has_variants));
     if (Array.isArray(item.variants) && item.variants.length > 0) {
       setVariants(
-        item.variants.map((v) => ({
-          id: v.id || `${v.quantity || 2}_chapati`,
-          name: v.name || `${v.quantity || 2} Chapati`,
-          quantity: Number(v.quantity) || 2,
+        item.variants.map((v, idx) => ({
+          id: v.id || `opt_${idx + 1}`,
+          name: v.name || '',
+          quantity: Number(v.quantity) || idx + 1,
           price: String(v.price != null ? v.price : ''),
         }))
       );
     } else {
-      setVariants([
-        { id: '2_chapati', name: '2 Chapati', quantity: 2, price: '' },
-        { id: '3_chapati', name: '3 Chapati', quantity: 3, price: '' },
-      ]);
+      setVariants([]);
     }
 
     // Fetch recipe
@@ -214,7 +205,7 @@ export default function MenuManagement() {
         (v) => v.name && v.name.trim() && v.price !== '' && !isNaN(Number(v.price)) && Number(v.price) >= 0
       );
       if (validVariants.length === 0) {
-        showToast('Please provide valid prices for your chapati / quantity options.', 'error');
+        showToast('Please provide valid names and prices for your quantity options.', 'error');
         return;
       }
       if (!price || isNaN(effectivePrice) || effectivePrice <= 0) {
@@ -239,10 +230,10 @@ export default function MenuManagement() {
         'variants',
         JSON.stringify(
           hasVariants
-            ? validVariants.map((v) => ({
-                id: v.id || `${v.quantity || 2}_chapati`,
+            ? validVariants.map((v, idx) => ({
+                id: v.id || `opt_${v.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}_${idx}`,
                 name: v.name.trim(),
-                quantity: Number(v.quantity) || 2,
+                quantity: Number(v.quantity) || idx + 1,
                 price: Number(v.price),
               }))
             : []
@@ -621,7 +612,7 @@ export default function MenuManagement() {
                           key={i}
                           className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-amber-50 text-amber-900 border border-amber-200/90 px-2 py-0.5 rounded-lg shadow-2xs"
                         >
-                          <span>🫓 {v.name}:</span>
+                          <span>{v.name}:</span>
                           <span className="text-emerald-700 font-black">₹{v.price}</span>
                         </span>
                       ))}
@@ -991,13 +982,7 @@ export default function MenuManagement() {
                   required
                   placeholder="e.g. Chapati Bhaji, Masala Dosa"
                   value={name}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setName(val);
-                    if (!editingItem && val.toLowerCase().includes('chapati') && !hasVariants) {
-                      setHasVariants(true);
-                    }
-                  }}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-600 outline-none font-medium"
                 />
               </div>
@@ -1015,7 +1000,7 @@ export default function MenuManagement() {
                       hasVariants
                         ? variants.some((v) => v.price !== '' && !isNaN(Number(v.price)))
                           ? `₹${Math.min(...variants.filter((v) => v.price !== '' && !isNaN(Number(v.price))).map((v) => Number(v.price)))}`
-                          : 'Auto-set from chapati prices below'
+                          : 'Auto-set from quantity prices below'
                         : 'e.g. 50'
                     }
                     value={
@@ -1033,7 +1018,7 @@ export default function MenuManagement() {
                   />
                   {hasVariants && (
                     <p className="text-[10px] text-amber-700 font-semibold mt-1">
-                      * Starting price automatically reflects your lowest chapati option below.
+                      * Starting price automatically reflects your lowest quantity option below.
                     </p>
                   )}
                 </div>
@@ -1072,17 +1057,19 @@ export default function MenuManagement() {
                 </div>
               </div>
 
-              {/* Chapati / Quantity Options (Portion Pricing) */}
+              {/* Quantity Options (Portion Pricing) */}
               <div className="p-4 bg-amber-50/70 border border-amber-200/90 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">🫓</span>
+                    <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 shrink-0">
+                      <Layers className="w-4 h-4" />
+                    </div>
                     <div>
                       <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">
-                        Chapati / Quantity-Based Pricing
+                        Quantity-Based Pricing
                       </h4>
                       <p className="text-[11px] text-amber-800 font-medium">
-                        Independently select chapati quantities (e.g. 2, 3, 4) and set distinct prices for each.
+                        Independently configure quantities or portions (e.g. Half, Full, 1 Glass) and set distinct prices for each.
                       </p>
                     </div>
                   </div>
@@ -1093,12 +1080,6 @@ export default function MenuManagement() {
                       onChange={(e) => {
                         const checked = e.target.checked;
                         setHasVariants(checked);
-                        if (checked && (!variants || variants.length === 0)) {
-                          setVariants([
-                            { id: '2_chapati', name: '2 Chapati', quantity: 2, price: '' },
-                            { id: '3_chapati', name: '3 Chapati', quantity: 3, price: '' },
-                          ]);
-                        }
                       }}
                       className="sr-only peer"
                     />
@@ -1111,114 +1092,87 @@ export default function MenuManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="text-[11px] font-extrabold text-amber-950 uppercase tracking-wide block">
-                          Chapati Quantities & Custom Prices
+                          Quantity Options & Dynamic Prices
                         </span>
                         <span className="text-[10px] text-amber-700 font-medium">
-                          Add, remove, or change any chapati quantity and its custom price.
+                          Add custom portion names and set dynamic pricing for each.
                         </span>
                       </div>
                       <button
                         type="button"
                         onClick={() => {
-                          const existingQuantities = variants.map((v) => Number(v.quantity) || 0);
-                          let nextQty = 2;
-                          for (let q = 1; q <= 10; q++) {
-                            if (!existingQuantities.includes(q)) {
-                              nextQty = q;
-                              break;
-                            }
-                          }
-                          if (existingQuantities.includes(nextQty)) {
-                            nextQty = Math.max(...existingQuantities, 0) + 1;
-                          }
                           setVariants([
                             ...variants,
                             {
-                              id: `${nextQty}_chapati`,
-                              name: `${nextQty} Chapati`,
-                              quantity: nextQty,
+                              id: `opt_${Date.now()}_${variants.length + 1}`,
+                              name: '',
                               price: '',
+                              quantity: variants.length + 1,
                             },
                           ]);
                         }}
-                        className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                        className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Add Quantity Option</span>
+                        <span>Add Quantity</span>
                       </button>
                     </div>
 
-                    <div className="space-y-2.5">
-                      {variants.map((v, idx) => {
-                        const standardCounts = [1, 2, 3, 4, 5, 6, 7, 8];
-                        const isStandard = standardCounts.includes(Number(v.quantity));
-                        return (
+                    {variants.length === 0 ? (
+                      <div className="text-center py-5 px-4 bg-white/70 rounded-2xl border-2 border-dashed border-amber-200">
+                        <p className="text-xs font-bold text-amber-900 mb-1">No quantity options added yet</p>
+                        <p className="text-[11px] text-amber-700 font-medium mb-2.5">
+                          Click &ldquo;Add Quantity&rdquo; to add options (e.g. Half, Full, 1 Glass, 2 Chapatis).
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVariants([
+                              {
+                                id: `opt_${Date.now()}_1`,
+                                name: '',
+                                price: '',
+                                quantity: 1,
+                              },
+                            ]);
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Quantity</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {variants.map((v, idx) => (
                           <div
                             key={idx}
                             className="bg-white p-3 rounded-2xl border border-amber-200 shadow-2xs space-y-2"
                           >
                             <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
-                              {/* Quantity Selector Dropdown */}
-                              <div className="w-full sm:w-48">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                                  <span>🫓 Chapati Quantity</span>
+                              {/* Quantity / Portion Name Textfield */}
+                              <div className="flex-1 min-w-[160px]">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                  Quantity / Portion Name
                                 </label>
-                                <select
-                                  value={isStandard ? v.quantity : 'custom'}
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Half, Full, 1 Glass, 2 Chapatis"
+                                  value={v.name}
                                   onChange={(e) => {
-                                    const val = e.target.value;
                                     const updated = [...variants];
-                                    if (val === 'custom') {
-                                      updated[idx].isCustom = true;
-                                    } else {
-                                      const num = Number(val);
-                                      updated[idx].quantity = num;
-                                      updated[idx].name = `${num} Chapati`;
-                                      updated[idx].id = `${num}_chapati`;
-                                      updated[idx].isCustom = false;
-                                    }
+                                    updated[idx].name = e.target.value;
                                     setVariants(updated);
                                   }}
                                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500 bg-white"
-                                >
-                                  {standardCounts.map((count) => (
-                                    <option key={count} value={count}>
-                                      {count} {count === 1 ? 'Chapati' : 'Chapatis'}
-                                    </option>
-                                  ))}
-                                  <option value="custom">Custom Quantity...</option>
-                                </select>
+                                  required
+                                />
                               </div>
 
-                              {/* If Custom Quantity, show direct number input */}
-                              {(!isStandard || v.isCustom) && (
-                                <div className="w-24">
-                                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                                    Count
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    placeholder="Qty"
-                                    value={v.quantity || ''}
-                                    onChange={(e) => {
-                                      const num = Number(e.target.value);
-                                      const updated = [...variants];
-                                      updated[idx].quantity = num;
-                                      updated[idx].name = `${num} Chapati`;
-                                      updated[idx].id = `${num}_chapati`;
-                                      setVariants(updated);
-                                    }}
-                                    className="w-full px-2.5 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 text-center outline-none focus:ring-2 focus:ring-amber-500"
-                                    required
-                                  />
-                                </div>
-                              )}
-
                               {/* Price Input */}
-                              <div className="flex-1 min-w-[120px]">
+                              <div className="w-32 sm:w-36">
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                                  Price for {v.quantity || '?'} {Number(v.quantity) === 1 ? 'Chapati' : 'Chapatis'} (₹)
+                                  Price (₹)
                                 </label>
                                 <div className="relative">
                                   <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
@@ -1226,7 +1180,7 @@ export default function MenuManagement() {
                                     type="number"
                                     min="0"
                                     step="1"
-                                    placeholder="e.g. 40"
+                                    placeholder="e.g. 50"
                                     value={v.price}
                                     onChange={(e) => {
                                       const updated = [...variants];
@@ -1240,26 +1194,24 @@ export default function MenuManagement() {
                               </div>
 
                               {/* Remove Button */}
-                              {variants.length > 1 && (
-                                <div className="sm:self-end pb-0.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setVariants(variants.filter((_, i) => i !== idx))}
-                                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-rose-200"
-                                    title="Remove this chapati option"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              )}
+                              <div className="sm:self-end pb-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setVariants(variants.filter((_, i) => i !== idx))}
+                                  className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                                  title="Remove this quantity option"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
 
-                            {/* Option preview and optional label customization */}
+                            {/* Option preview */}
                             <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
                               <span className="flex items-center gap-1 font-medium">
-                                <span>Student sees:</span>
+                                <span>Displayed as:</span>
                                 <strong className="text-slate-900 font-bold">
-                                  {v.name || `${v.quantity} Chapati`}
+                                  {v.name || 'Untitled Portion'}
                                 </strong>
                                 {v.price && (
                                   <span className="text-emerald-700 font-black">
@@ -1267,50 +1219,19 @@ export default function MenuManagement() {
                                   </span>
                                 )}
                               </span>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = [...variants];
-                                  updated[idx].showEditLabel = !updated[idx].showEditLabel;
-                                  setVariants(updated);
-                                }}
-                                className="text-[10px] font-bold text-amber-800 hover:underline cursor-pointer"
-                              >
-                                {v.showEditLabel ? 'Hide Custom Label' : 'Customize Label'}
-                              </button>
                             </div>
-
-                            {v.showEditLabel && (
-                              <div className="pt-1.5 animate-in fade-in">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
-                                  Custom Display Label
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. 2 Chapati + Bhaji"
-                                  value={v.name}
-                                  onChange={(e) => {
-                                    const updated = [...variants];
-                                    updated[idx].name = e.target.value;
-                                    setVariants(updated);
-                                  }}
-                                  className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-amber-500"
-                                />
-                              </div>
-                            )}
                           </div>
-                        );
-                      })}
-                    </div>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="p-2.5 bg-amber-100/60 rounded-xl border border-amber-200/80 text-[11px] text-amber-950 font-medium space-y-1">
                       <p className="font-bold flex items-center gap-1 text-amber-900">
                         <span>💡 How it works:</span>
                       </p>
                       <ul className="list-disc list-inside space-y-0.5 text-amber-900/90 text-[10px]">
-                        <li>Admin independently selects the chapati count (1, 2, 3, 4...) and enters the price for each portion.</li>
-                        <li>When a student selects this item, they are asked for their preferred chapati quantity with live price updates.</li>
+                        <li>Admin independently creates quantity/portion options (e.g. Half, Full, 1 Glass, 2 Chapatis) and enters the price for each.</li>
+                        <li>When a customer selects this item, they choose their preferred quantity option with live dynamic price updates.</li>
                       </ul>
                     </div>
                   </div>

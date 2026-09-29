@@ -209,6 +209,7 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     localStorage.removeItem('student_token');
     localStorage.removeItem('student_user');
+    localStorage.removeItem('mess_parcel_timers');
   };
 
   const openAuthModal = (forCheckout = false, mode = 'login', tokenVal = null) => {

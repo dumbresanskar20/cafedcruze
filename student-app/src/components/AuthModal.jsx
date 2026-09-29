@@ -3,6 +3,9 @@ import { X, Mail, Lock, User, Contact, Phone, ArrowRight, KeyRound, AlertCircle,
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import CAFE_D_CRUZE_LOGO from '../assets/logo';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+
 
 const getGoogleOAuthUrl = () => {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '404710338094-k2vudlae2nql5226ru3ajlfnmhskdtru.apps.googleusercontent.com';
@@ -87,18 +90,61 @@ export default function AuthModal() {
     },
   });
 
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        GoogleAuth.initialize();
+      } catch (err) {
+        console.warn('GoogleAuth init error on mount:', err);
+      }
+    }
+  }, []);
+
   const handleGoogleClick = async () => {
     resetFormAlerts();
     setGoogleLoading(true);
 
-    // Web Browser Flow
+    // Native Android / iOS APK Flow via Capacitor Google Auth
+    if (Capacitor.isNativePlatform()) {
+      try {
+        try {
+          await GoogleAuth.initialize();
+        } catch (_) {}
+
+        const googleUser = await GoogleAuth.signIn();
+        const idToken = googleUser?.authentication?.idToken || googleUser?.idToken;
+        const accessToken = googleUser?.authentication?.accessToken || null;
+
+        if (idToken || accessToken) {
+          const res = await loginWithGoogle(idToken || null, accessToken || null);
+          if (res?.success) {
+            setSuccessMsg(res.message || (mode === 'signup' ? 'Account created with Google successfully!' : 'Signed in with Google successfully!'));
+          } else {
+            setErrorMsg(res?.message || 'Google authentication failed.');
+          }
+        } else {
+          setErrorMsg('No credentials received from Google.');
+        }
+      } catch (err) {
+        console.error('Native Google Sign-In error:', err);
+        const errMsg = err?.message || '';
+        const isCancelled = errMsg.toLowerCase().includes('cancel') || err?.code === '12501' || err?.code === 12501;
+        if (!isCancelled) {
+          setErrorMsg(errMsg || 'Google Sign-In failed. Please try again.');
+        }
+      } finally {
+        setGoogleLoading(false);
+      }
+      return;
+    }
+
+    // Fallback for custom in-app WebViews on browser
     if (isWebViewOrApp()) {
-      // In WebView APKs, window.open popups fail without multi-window handling.
-      // We navigate directly to the Google OAuth 2.0 authorization URL:
       window.location.href = getGoogleOAuthUrl();
       return;
     }
 
+    // Standard Web Browser Flow
     try {
       handleGoogleAuth();
     } catch (err) {

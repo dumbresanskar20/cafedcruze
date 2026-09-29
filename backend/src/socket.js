@@ -72,12 +72,27 @@ const initSocketIO = (io) => {
     });
 
     socket.on('order:timer_cleared', (data) => {
-      console.log(`[Socket.IO] Parcel timer cleared for Order #${data?.orderId}`);
+      console.log(`[Socket.IO] Parcel timer cleared for Order #${data?.token_number || data?.orderId}`);
       io.to('kitchen').emit('parcel:timer_cleared', data);
       if (data?.studentId) {
         io.to(`student:${data.studentId}`).emit('parcel:timer_cleared', data);
       }
       io.emit('order:timer_cleared_broadcast', data);
+    });
+
+    // Real-time Order Status Updates (Forwarded from Kitchen/Admin)
+    socket.on('order:status_updated', (data) => {
+      console.log(`[Socket.IO] Order status updated: Order #${data?.token_number || data?.orderId} -> ${data?.order_status}`);
+      io.to('kitchen').emit('order:status_updated', data);
+      if (data?.studentId) {
+        io.to(`student:${data.studentId}`).emit('student:order_updated', data);
+        if (['delivered', 'expired', 'cancelled'].includes(data?.order_status)) {
+          io.to(`student:${data.studentId}`).emit('parcel:timer_cleared', data);
+        }
+      }
+      if (['delivered', 'expired', 'cancelled'].includes(data?.order_status)) {
+        io.emit('order:timer_cleared_broadcast', data);
+      }
     });
 
     socket.on('disconnect', () => {

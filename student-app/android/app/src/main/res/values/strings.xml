@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Cafe D Cruze</string>
+    <string name="title_activity_main">Cafe D Cruze</string>
+    <string name="package_name">com.cafedcruze.mealbook</string>
+    <string name="custom_url_scheme">com.cafedcruze.mealbook</string>
+    <string name="server_client_id">404710338094-k2vudlae2nql5226ru3ajlfnmhskdtru.apps.googleusercontent.com</string>
+</resources>

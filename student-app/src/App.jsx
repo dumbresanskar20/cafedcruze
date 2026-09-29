@@ -26,6 +26,7 @@ export default function App() {
     setSelectedMealType,
     activeMealWindows,
     currentMealWindow,
+    loadingWindows,
     allMealsInactive,
     redirectNotice,
     clearCart,
@@ -62,10 +63,142 @@ export default function App() {
   });
   const [dismissedParcelAlerts, setDismissedParcelAlerts] = useState({});
 
+  const studentRef = React.useRef(student);
+  useEffect(() => {
+    studentRef.current = student;
+  }, [student]);
+
+  const isAuthenticatedRef = React.useRef(isAuthenticated);
+  useEffect(() => {
+    isAuthenticatedRef.current = isAuthenticated;
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const ticker = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(ticker);
   }, []);
+
+  // Cross-tab storage synchronization for mess_parcel_timers
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key === 'mess_parcel_timers') {
+        try {
+          setParcelTimers(e.newValue ? JSON.parse(e.newValue) : {});
+        } catch {
+          setParcelTimers({});
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // Sync active parcel orders with backend and purge delivered / expired / stale timers
+  const syncActiveParcelOrders = React.useCallback(async () => {
+    if (!isAuthenticatedRef.current || !studentRef.current) {
+      setParcelTimers({});
+      localStorage.removeItem('mess_parcel_timers');
+      return;
+    }
+
+    try {
+      const res = await api.get('/orders/my-orders');
+      if (res.data?.success && Array.isArray(res.data.orders)) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const orders = res.data.orders;
+
+        // Active parcel orders for today that are not delivered, expired, or cancelled
+        const activeParcelOrders = orders.filter((o) => {
+          const isParcel = Boolean(o.is_parcel || o.order_type === 'parcel');
+          const isToday = !o.date || o.date === todayStr;
+          const isActive = ['placed', 'preparing', 'ready'].includes(o.order_status);
+          return isParcel && isToday && isActive;
+        });
+
+        // Set of terminal (delivered, expired, cancelled, or old date) order IDs and tokens
+        const terminalOrderIds = new Set();
+        const terminalTokenNumbers = new Set();
+
+        orders.forEach((o) => {
+          const isOld = o.date && o.date !== todayStr;
+          const isTerminal = ['delivered', 'expired', 'cancelled'].includes(o.order_status);
+          if (isTerminal || isOld) {
+            if (o.id || o._id) terminalOrderIds.add(String(o.id || o._id));
+            if (o.token_number) terminalTokenNumbers.add(String(o.token_number));
+          }
+        });
+
+        setParcelTimers((prev) => {
+          const updated = {};
+
+          // Keep existing timers ONLY if they are not terminal and match an active order
+          Object.entries(prev).forEach(([key, timerData]) => {
+            if (!timerData) return;
+            const orderIdStr = String(timerData.orderId || key);
+            const tokenStr = String(timerData.token_number || key);
+
+            // Discard if recognized as terminal (delivered / expired / cancelled / past day)
+            if (terminalOrderIds.has(orderIdStr) || terminalTokenNumbers.has(tokenStr)) {
+              return;
+            }
+
+            // Find matching active parcel order for this student
+            const matchingOrder = activeParcelOrders.find(
+              (o) => String(o.id || o._id) === orderIdStr || String(o.token_number) === tokenStr
+            );
+
+            if (matchingOrder) {
+              const isReadyStatus = matchingOrder.order_status === 'ready';
+              updated[key] = {
+                ...timerData,
+                orderId: matchingOrder.id || matchingOrder._id,
+                token_number: matchingOrder.token_number,
+                date: matchingOrder.date || todayStr,
+                order_status: matchingOrder.order_status,
+                readyAt: isReadyStatus ? Math.min(timerData.readyAt || Date.now(), Date.now()) : timerData.readyAt,
+                order: matchingOrder,
+              };
+            }
+          });
+
+          // Add any active parcel orders marked 'ready' in DB that aren't in parcelTimers yet
+          activeParcelOrders.forEach((o) => {
+            const ordId = String(o.id || o._id);
+            const tokNum = String(o.token_number);
+            if (o.order_status === 'ready' && !updated[ordId] && !updated[tokNum]) {
+              updated[ordId] = {
+                orderId: o.id || o._id,
+                token_number: o.token_number,
+                studentId: studentRef.current?._id || studentRef.current?.id,
+                readyAt: Date.now(),
+                order_status: 'ready',
+                date: o.date || todayStr,
+                order: o,
+              };
+            }
+          });
+
+          localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.warn('Could not sync active parcel orders:', err?.message || err);
+    }
+  }, []);
+
+  // Periodic and focus-based active parcel synchronization
+  useEffect(() => {
+    if (!isAuthenticated || !student) return;
+    syncActiveParcelOrders();
+    const interval = setInterval(syncActiveParcelOrders, 20000);
+    const handleFocus = () => syncActiveParcelOrders();
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isAuthenticated, student, syncActiveParcelOrders]);
 
   // Dynamically measure navbar height for sticky positioning
   useEffect(() => {
@@ -97,33 +230,57 @@ export default function App() {
     selectedMealTypeRef.current = selectedMealType;
   }, [selectedMealType]);
 
-  const fetchMenuItems = React.useCallback(async (mealTypeToFetch) => {
+  const activeMealWindowsRef = React.useRef(activeMealWindows);
+  useEffect(() => {
+    activeMealWindowsRef.current = activeMealWindows;
+  }, [activeMealWindows]);
+
+  const fetchMenuItems = React.useCallback(async (mealTypeToFetch, isSilent = false) => {
     const meal = mealTypeToFetch || selectedMealTypeRef.current || 'breakfast';
-    setLoadingMenu(true);
+    if (!isSilent) {
+      setLoadingMenu(true);
+    }
     try {
       const res = await api.get(`/menu/items?meal_type=${meal}&active_only=true`);
       if (res.data.success) {
+        const isActive = res.data.is_active !== false;
         setBackendStatus({
-          is_active: res.data.is_active !== false,
+          is_active: isActive,
           is_currently_open: res.data.is_currently_open !== false,
         });
+
+        // If this meal category is reported inactive on the backend, auto-switch to active meal category
+        if (!isActive && activeMealWindowsRef.current && activeMealWindowsRef.current.length > 0) {
+          const alternate = activeMealWindowsRef.current.find((w) => w.is_currently_open) || activeMealWindowsRef.current[0];
+          if (alternate?.meal_type && alternate.meal_type.toLowerCase() !== meal.toLowerCase()) {
+            setSelectedMealType(alternate.meal_type.toLowerCase());
+            return;
+          }
+        }
+
         const items = res.data.items || [];
         setMenuItems(items);
         preloadImages(items.map((i) => i.image_url));
       } else {
-        setMenuItems([]);
+        if (!isSilent) {
+          setMenuItems([]);
+        }
       }
     } catch (err) {
       if (err.response?.status === 402) {
         setSubscriptionExpired(true);
       } else {
         console.warn('API error fetching menu items:', err?.message || err);
-        setMenuItems([]);
+        if (!isSilent) {
+          setMenuItems([]);
+        }
       }
     } finally {
-      setLoadingMenu(false);
+      if (!isSilent) {
+        setLoadingMenu(false);
+      }
     }
-  }, []);
+  }, [setSelectedMealType]);
 
   const checkSub = async () => {
     try {
@@ -159,14 +316,14 @@ export default function App() {
       const isExp = payload.is_expired || payload.status !== 'active';
       setSubscriptionExpired(Boolean(isExp));
       if (!isExp) {
-        fetchMenuItems(selectedMealTypeRef.current);
+        fetchMenuItems(selectedMealTypeRef.current, true);
       }
     });
 
     // Real-time live re-ranking when students rate items or new orders occur
     const handleLiveMenuUpdate = (data) => {
       console.log('[Student Socket] Live menu rating/sales update received:', data);
-      fetchMenuItems(selectedMealTypeRef.current);
+      fetchMenuItems(selectedMealTypeRef.current, true);
     };
 
     socket.on('menu:rating_updated', handleLiveMenuUpdate);
@@ -194,26 +351,49 @@ export default function App() {
 
     // Real-time parcel preparation timers broadcast from admin
     const handleTimerUpdate = (data) => {
-      if (data && data.orderId) {
-        setParcelTimers((prev) => {
-          const updated = { ...prev, [data.orderId]: data };
-          if (data.token_number) updated[data.token_number] = data;
-          localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
-          return updated;
-        });
+      if (!data || !data.orderId) return;
+      const currentStudentId = studentRef.current?._id || studentRef.current?.id;
+      if (data.studentId && currentStudentId && String(data.studentId) !== String(currentStudentId)) {
+        return; // Ignore timers meant for other students
       }
+      if (!isAuthenticatedRef.current) return;
+
+      setParcelTimers((prev) => {
+        const timerData = {
+          ...data,
+          date: data.date || new Date().toISOString().split('T')[0],
+        };
+        const updated = { ...prev, [String(data.orderId)]: timerData };
+        if (data.token_number) {
+          updated[String(data.token_number)] = timerData;
+        }
+        localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
+        return updated;
+      });
     };
 
     const handleTimerCleared = (data) => {
-      if (data && data.orderId) {
-        setParcelTimers((prev) => {
-          const updated = { ...prev };
-          delete updated[data.orderId];
-          if (data.token_number) delete updated[data.token_number];
-          localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
-          return updated;
+      if (!data) return;
+      const targetOrderId = data.orderId ? String(data.orderId) : null;
+      const targetToken = data.token_number ? String(data.token_number) : null;
+
+      setParcelTimers((prev) => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach((key) => {
+          const item = updated[key];
+          const itemOrderId = item?.orderId ? String(item.orderId) : null;
+          const itemToken = item?.token_number ? String(item.token_number) : null;
+
+          if (
+            (targetOrderId && (key === targetOrderId || itemOrderId === targetOrderId)) ||
+            (targetToken && (key === targetToken || itemToken === targetToken))
+          ) {
+            delete updated[key];
+          }
         });
-      }
+        localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
+        return updated;
+      });
     };
 
     socket.on('order:timer_broadcast', handleTimerUpdate);
@@ -230,7 +410,9 @@ export default function App() {
           const { type, payload } = event.data || {};
           if (type === 'TIMER_SET' && payload?.orderId) {
             handleTimerUpdate(payload);
-          } else if (type === 'TIMER_CLEARED' && payload?.orderId) {
+          } else if (type === 'TIMER_CLEARED') {
+            handleTimerCleared(payload);
+          } else if (type === 'STATUS_UPDATED' && ['delivered', 'expired', 'cancelled'].includes(payload?.order_status)) {
             handleTimerCleared(payload);
           }
         };
@@ -242,7 +424,7 @@ export default function App() {
     // Also listen for local rating submission event
     const handleLocalRating = () => {
       console.log('[Student Event] Local rating submitted, refreshing ranked menu...');
-      fetchMenuItems(selectedMealTypeRef.current);
+      fetchMenuItems(selectedMealTypeRef.current, true);
     };
 
     window.addEventListener('rating_submitted', handleLocalRating);
@@ -283,22 +465,36 @@ export default function App() {
           return prev;
         });
 
-        if (payload.order_status === 'delivered') {
+        if (['delivered', 'expired', 'cancelled'].includes(payload.order_status)) {
+          const targetOrderId = payload.orderId ? String(payload.orderId) : null;
+          const targetToken = payload.token_number ? String(payload.token_number) : null;
+
           setParcelTimers((prev) => {
             const updated = { ...prev };
-            if (payload.orderId) delete updated[payload.orderId];
-            if (payload.token_number) delete updated[payload.token_number];
+            Object.keys(updated).forEach((key) => {
+              const item = updated[key];
+              const itemOrderId = item?.orderId ? String(item.orderId) : null;
+              const itemToken = item?.token_number ? String(item.token_number) : null;
+
+              if (
+                (targetOrderId && (key === targetOrderId || itemOrderId === targetOrderId)) ||
+                (targetToken && (key === targetToken || itemToken === targetToken))
+              ) {
+                delete updated[key];
+              }
+            });
             localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
             return updated;
           });
         }
+        syncActiveParcelOrders();
       }
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [isAuthenticated, student, clearCart]);
+  }, [isAuthenticated, student, clearCart, syncActiveParcelOrders]);
 
   // Check for reset_token in URL query parameters on mount
   useEffect(() => {
@@ -328,17 +524,26 @@ export default function App() {
     return () => window.removeEventListener('test_payment_failure_modal', handleSimulate);
   }, [selectedMealType, student]);
 
+  const prevMealTypeRef = React.useRef(null);
   useEffect(() => {
-    fetchMenuItems(selectedMealType);
-  }, [selectedMealType, fetchMenuItems]);
+    if (selectedMealType && !loadingWindows) {
+      const isCategorySwitch = prevMealTypeRef.current !== selectedMealType;
+      prevMealTypeRef.current = selectedMealType;
+      // Show skeleton loader on first load or when switching meal categories; silent background update otherwise
+      fetchMenuItems(selectedMealType, !isCategorySwitch);
+    }
+  }, [selectedMealType, loadingWindows, fetchMenuItems]);
 
   const handleOrderSuccess = (tokenNumber, order) => {
     clearCart();
     setSuccessToken(tokenNumber);
     setSuccessOrder(order);
+    syncActiveParcelOrders();
   };
 
-  const mealNameCapitalized = selectedMealType.charAt(0).toUpperCase() + selectedMealType.slice(1);
+  const mealNameCapitalized = selectedMealType
+    ? (selectedMealType.charAt(0).toUpperCase() + selectedMealType.slice(1)).replace(/_/g, ' ')
+    : '';
   const isCurrentlyOpen = currentMealWindow ? currentMealWindow.is_currently_open : backendStatus.is_currently_open;
   const isFullDay = currentMealWindow ? currentMealWindow.is_full_day : false;
   const formattedStartTime = currentMealWindow?.formatted_start_time || '08:00 AM';
@@ -412,7 +617,7 @@ export default function App() {
                 </div>
 
                 <h2 className="text-2xl sm:text-4xl font-extrabold font-display text-brand-dark tracking-tight">
-                  Today's <span className="text-brand-orange capitalize">{selectedMealType}</span> Menu
+                  Today's <span className="text-brand-orange capitalize">{selectedMealType?.replace(/_/g, ' ')}</span> Menu
                 </h2>
 
                 {/* Operating Window Badge */}
@@ -444,7 +649,7 @@ export default function App() {
             <MealDiscountNote />
 
             {/* Menu Cards Grid */}
-            {loadingMenu ? (
+            {loadingMenu || loadingWindows ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 animate-pulse">
                 {[1, 2, 3].map((n) => (
                   <div key={n} className="h-80 bg-white/70 rounded-3xl border border-stone-200" />
@@ -454,7 +659,7 @@ export default function App() {
               <div className="text-center py-12 sm:py-16 bg-amber-50/60 rounded-3xl border border-amber-200 space-y-2 px-4">
                 <AlertCircle className="w-8 h-8 text-amber-600 mx-auto" />
                 <p className="font-display font-bold text-stone-800 text-base sm:text-lg">
-                  {selectedMealType.toUpperCase()} is currently not offered by Canteen Management.
+                  {(selectedMealType?.replace(/_/g, ' ') || '').toUpperCase()} is currently not offered by Canteen Management.
                 </p>
                 <p className="text-xs text-stone-500">Please select another active meal category above.</p>
               </div>
@@ -551,11 +756,29 @@ export default function App() {
 
       {/* Floating Live Parcel Tracker Banner for active timer / ready status */}
       {(() => {
-        // Collect active timers
-        const activeTimerEntries = Object.entries(parcelTimers).filter(([k, t]) => {
-          if (!t || !t.readyAt) return false;
-          if (dismissedParcelAlerts[t.orderId || k]) return false;
-          return true;
+        if (!isAuthenticated || !student) return null;
+
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        // Collect and deduplicate active timers
+        const seenOrders = new Set();
+        const activeTimerEntries = [];
+
+        Object.entries(parcelTimers).forEach(([k, t]) => {
+          if (!t || !t.readyAt) return;
+          if (dismissedParcelAlerts[t.orderId || k]) return;
+          // Filter out past days
+          if (t.date && t.date !== todayStr) return;
+          // Filter out delivered, expired, or cancelled status
+          if (['delivered', 'expired', 'cancelled'].includes(t.order_status)) return;
+          // If diffSeconds is 0 (ready), but it has been more than 4 hours, drop it
+          if (now - t.readyAt > 4 * 60 * 60 * 1000) return;
+
+          const dedupeKey = String(t.orderId || t.token_number || k);
+          if (!seenOrders.has(dedupeKey)) {
+            seenOrders.add(dedupeKey);
+            activeTimerEntries.push([k, t]);
+          }
         });
 
         if (activeTimerEntries.length === 0) return null;
@@ -563,7 +786,7 @@ export default function App() {
         // Show the top active timer
         const [targetKey, activeTimer] = activeTimerEntries[0];
         const diffSeconds = Math.max(0, Math.floor((activeTimer.readyAt - now) / 1000));
-        const isReady = diffSeconds === 0;
+        const isReady = activeTimer.order_status === 'ready' || diffSeconds === 0;
 
         const mins = Math.floor(diffSeconds / 60);
         const secs = diffSeconds % 60;
@@ -614,14 +837,14 @@ export default function App() {
                 </p>
                 <button
                   onClick={() => {
-                    setDetailModalOrder({
+                    setDetailModalOrder(activeTimer.order || {
                       id: activeTimer.orderId || targetKey,
                       _id: activeTimer.orderId || targetKey,
                       token_number: activeTimer.token_number || targetKey,
                       order_status: isReady ? 'ready' : 'preparing',
                       is_parcel: true,
                       order_type: 'parcel',
-                      date: new Date().toISOString().split('T')[0],
+                      date: activeTimer.date || todayStr,
                     });
                   }}
                   className={`px-3 py-1.5 rounded-xl font-black text-xs transition-all shadow-sm shrink-0 cursor-pointer ${

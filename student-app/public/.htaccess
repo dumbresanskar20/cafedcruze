@@ -19,7 +19,7 @@
   ForceType application/vnd.android.package-archive
   <IfModule mod_headers.c>
     Header set Content-Type "application/vnd.android.package-archive"
-    Header set Content-Disposition "attachment; filename=\"DYPCOEI-Canteen.apk\""
+    Header set Content-Disposition "attachment; filename=\"Cafe-D-Cruze.apk\""
     Header set X-Content-Type-Options "nosniff"
     Header set Cache-Control "public, max-age=3600"
   </IfModule>

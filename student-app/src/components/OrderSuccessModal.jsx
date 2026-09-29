@@ -16,8 +16,46 @@ export default function OrderSuccessModal({ tokenNumber, order, onClose }) {
     }
   }, [order?.order_status]);
 
+  // Clean up timers from localStorage if order is delivered, expired, or cancelled
+  useEffect(() => {
+    if (['delivered', 'expired', 'cancelled'].includes(currentStatus)) {
+      try {
+        const stored = localStorage.getItem('mess_parcel_timers');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          let changed = false;
+          const oid = orderId ? String(orderId) : null;
+          const tok = tokenNumber ? String(tokenNumber) : null;
+
+          Object.keys(parsed).forEach((k) => {
+            const item = parsed[k];
+            if (
+              (oid && (k === oid || String(item?.orderId) === oid)) ||
+              (tok && (k === tok || String(item?.token_number) === tok))
+            ) {
+              delete parsed[k];
+              changed = true;
+            }
+          });
+
+          if (changed) {
+            localStorage.setItem('mess_parcel_timers', JSON.stringify(parsed));
+          }
+        }
+      } catch (e) {
+        console.error('Error cleaning parcel timer in OrderSuccessModal:', e);
+      }
+    }
+  }, [currentStatus, orderId, tokenNumber]);
+
   // Sync and tick parcel countdown timer
   useEffect(() => {
+    const isTerminalStatus = ['delivered', 'expired', 'cancelled'].includes(currentStatus);
+    if (isTerminalStatus) {
+      setTimeLeft(0);
+      return;
+    }
+
     const checkTimer = () => {
       try {
         const stored = localStorage.getItem('mess_parcel_timers');
@@ -27,7 +65,7 @@ export default function OrderSuccessModal({ tokenNumber, order, onClose }) {
           if (tData && tData.readyAt) {
             const diff = Math.max(0, Math.floor((tData.readyAt - Date.now()) / 1000));
             setTimeLeft(diff);
-            if (diff === 0) {
+            if (diff === 0 && !['delivered', 'cancelled', 'expired'].includes(currentStatus)) {
               setCurrentStatus('ready');
             }
             return;
@@ -48,7 +86,7 @@ export default function OrderSuccessModal({ tokenNumber, order, onClose }) {
         bc.onmessage = (event) => {
           const { type, payload } = event.data || {};
           if (
-            (payload?.orderId && payload.orderId === orderId) ||
+            (payload?.orderId && String(payload.orderId) === String(orderId)) ||
             (payload?.token_number && String(payload.token_number) === String(tokenNumber))
           ) {
             if (type === 'TIMER_SET') {

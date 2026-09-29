@@ -47,15 +47,49 @@ export default function OrderHistoryModal({ isOpen, onClose }) {
     try {
       const res = await api.get('/orders/my-orders');
       if (res.data.success) {
-        setOrders(res.data.orders);
+        const fetchedOrders = res.data.orders || [];
+        setOrders(fetchedOrders);
         const initialRatedMap = {};
-        res.data.orders.forEach((ord) => {
+        fetchedOrders.forEach((ord) => {
           const orderId = ord._id || ord.id;
           if (ord.is_rated && ord.rating != null) {
             initialRatedMap[orderId] = ord.rating;
           }
         });
         setRatedOrdersMap((prev) => ({ ...initialRatedMap, ...prev }));
+
+        // Purge delivered, expired, and cancelled orders from mess_parcel_timers
+        try {
+          const stored = localStorage.getItem('mess_parcel_timers');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            let changed = false;
+            fetchedOrders.forEach((ord) => {
+              if (['delivered', 'expired', 'cancelled'].includes(ord.order_status)) {
+                const oid = String(ord.id || ord._id);
+                const tok = ord.token_number ? String(ord.token_number) : null;
+                Object.keys(parsed).forEach((k) => {
+                  const item = parsed[k];
+                  if (
+                    k === oid ||
+                    (tok && k === tok) ||
+                    String(item?.orderId) === oid ||
+                    (tok && String(item?.token_number) === tok)
+                  ) {
+                    delete parsed[k];
+                    changed = true;
+                  }
+                });
+              }
+            });
+            if (changed) {
+              localStorage.setItem('mess_parcel_timers', JSON.stringify(parsed));
+              setTimersMap(parsed);
+            }
+          }
+        } catch (storageErr) {
+          console.error('Error pruning timers in OrderHistoryModal:', storageErr);
+        }
       }
     } catch (err) {
       console.error('Error fetching order history:', err);

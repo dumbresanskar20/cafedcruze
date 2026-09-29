@@ -54,7 +54,6 @@ export default function Hero3D() {
 
           {/* Heading */}
           <h1 className="text-2xl sm:text-4xl lg:text-6xl font-extrabold font-display tracking-tight text-brand-dark leading-[1.15]">
-            Canteen <br className="hidden sm:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-orange via-amber-600 to-brand-terracotta">
               Pre-Order Booking App
             </span>
