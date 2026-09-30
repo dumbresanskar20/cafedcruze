@@ -1,0 +1,14 @@
+{
+  "appId": "com.cafedcruze.admin",
+  "appName": "Cafe D Cruze Admin",
+  "webDir": "dist",
+  "server": {
+    "url": "https://d-cruze-admin.mealbook.in",
+    "cleartext": true,
+    "allowNavigation": [
+      "d-cruze-admin.mealbook.in",
+      "cafe-d-cruze-api.mealbook.in",
+      "*.mealbook.in"
+    ]
+  }
+}

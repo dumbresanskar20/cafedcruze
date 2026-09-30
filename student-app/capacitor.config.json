@@ -1,0 +1,28 @@
+{
+  "appId": "com.cafedcruze.mealbook",
+  "appName": "Cafe D Cruze",
+  "webDir": "dist",
+  "server": {
+    "url": "https://cafe-d-cruze.mealbook.in",
+    "cleartext": true,
+    "allowNavigation": [
+      "cafe-d-cruze.mealbook.in",
+      "dev.mealbook.in",
+      "cafe-d-cruze-api.mealbook.in",
+      "*.razorpay.com",
+      "api.razorpay.com",
+      "checkout.razorpay.com",
+      "accounts.google.com"
+    ]
+  },
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": [
+        "profile",
+        "email"
+      ],
+      "serverClientId": "404710338094-k2vudlae2nql5226ru3ajlfnmhskdtru.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
+  }
+}

@@ -1,0 +1,12 @@
+node_modules
+.env
+.env.local
+ds_store
+*.log
+*.db
+dev.db
+scratch/
+
+# Explicitly whitelist deployment configuration dotfiles
+!.htaccess
+

@@ -1,0 +1,6 @@
+VITE_API_URL=https://cafe-d-cruze-api.mealbook.in/api
+VITE_SOCKET_URL=https://cafe-d-cruze-api.mealbook.in
+# Razorpay Key ID is dynamically loaded from backend API /orders/create-razorpay-order
+VITE_RAZORPAY_KEY_ID=rzp_live_TbW17YKepYhFXI
+VITE_RAZORPAY_CONFIG_ID=config_THo8j0zrrHg1Wp
+VITE_GOOGLE_CLIENT_ID=404710338094-k2vudlae2nql5226ru3ajlfnmhskdtru.apps.googleusercontent.com

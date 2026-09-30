@@ -1,0 +1,68 @@
+PORT=5000
+NODE_ENV=development
+
+# Database Connection (cPanel In-Built MySQL)
+# Using DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT configured below
+
+
+# Security & Auth Secrets
+JWT_SECRET=11f56e01807d207329da415cf6ca868c27b0f5c04da3a0e6d9f1a03993e026e17ab7d8d6ca55b3d865123260d6e25062496b83e5eab79bc92c2bd15063ca39dc
+JWT_REFRESH_SECRET=48404d601a0a33892ae7acec02d7b08c054337fd9d3ba364239e607b680072f5
+JWT_EXPIRES_IN=24h
+JWT_REFRESH_EXPIRES_IN=7d
+STUDENT_JWT_EXPIRES_IN=3650d
+GOOGLE_CLIENT_ID=404710338094-k2vudlae2nql5226ru3ajlfnmhskdtru.apps.googleusercontent.com
+
+# ────────────────────────────────────────────────────────────
+# 1. CANTEEN RAZORPAY ACCOUNT (Student Meal Checkout ONLY)
+# Used for student menu item purchasing. Never touch for subscription.
+# ────────────────────────────────────────────────────────────
+RAZORPAY_KEY_ID=rzp_live_TbW17YKepYhFXI
+RAZORPAY_KEY_SECRET=2eGBxJPZTmMdb5t7py44dycm
+RAZORPAY_WEBHOOK_SECRET=rzp_whsec_canteen_student_orders_secret
+
+# ────────────────────────────────────────────────────────────
+# 2. DEVELOPER RAZORPAY ACCOUNT (Canteen Subscription Billing ONLY)
+# Used for recurring canteen super_admin subscription payments to Developer.
+# ────────────────────────────────────────────────────────────
+DEV_RAZORPAY_KEY_ID=rzp_live_TcEcu4I8S5dKNj
+DEV_RAZORPAY_KEY_SECRET=nW36smU3DmmN08cqwXUpDcbh
+DEV_RAZORPAY_WEBHOOK_SECRET=rzp_whsec_dev_subscription_billing_secret
+
+# cPanel Webmail / SMTP Email Service for OTP, Invitations, & Password Resets
+SMTP_HOST=SMTP_USER
+SMTP_PORT=465
+SMTP_USER=support@mealbook.in
+SMTP_PASS=your_cpanel_support_email_password
+EMAIL_FROM="Cafe D Cruze Restaurant" <support@mealbook.in>
+
+# CORS Settings
+FRONTEND_STUDENT_URL=https://cafe-d-cruze.mealbook.in
+FRONTEND_ADMIN_URL=https://d-cruze-admin.mealbook.in
+
+# Local Storage & Uploads Configuration
+# On cPanel server, defaults to /home/mealbook/uploads (or relative ../uploads)
+UPLOAD_DIR=/home/mealbook/uploads
+API_BASE_URL=https://cafe-d-cruze-api.mealbook.in
+
+# Student Order History Visibility Policy (in days)
+# Controls how many days of order history are visible in the Student App (e.g., 3, 5, 7 days).
+# Canteen Admin and Super Admin always see all order history from the beginning.
+# Orders are NEVER automatically deleted from the database.
+ORDER_RETENTION_DAYS=7
+STUDENT_ORDER_HISTORY_DAYS=7
+
+
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=mealbook_dumbresanskar23
+DB_PASSWORD=Shree@8830
+DB_NAME=mealbook_cafedcruze
+
+# Admin Seeding Credentials (Used by seedAdmin.js)
+ADMIN_USERNAME=DYPCOEI_ADMIN
+ADMIN_EMAIL=admin@mess.com
+ADMIN_PASS=Admin@111
+
+# Google OAuth Configuration for Student Portal
+GOOGLE_CLIENT_ID=404710338094-d5cganqkkrjn1bkptmnju0m2dmdvs5ss.apps.googleusercontent.com
