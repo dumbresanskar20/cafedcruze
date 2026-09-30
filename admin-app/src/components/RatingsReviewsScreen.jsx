@@ -75,7 +75,7 @@ export default function RatingsReviewsScreen() {
               <span>Ratings & Reviews</span>
             </h2>
             <p className="text-xs text-slate-500 font-semibold mt-0.5">
-              Meal-wise average customer satisfaction and student reviews
+              Meal-wise average customer satisfaction and user reviews
             </p>
           </div>
         </div>
@@ -110,14 +110,14 @@ export default function RatingsReviewsScreen() {
               <span className="text-amber-400 text-lg">★★★★★</span>
             </div>
             <p className="text-[11px] text-slate-400 font-medium">
-              Based on {overallStats.total_reviews} student ratings
+              Based on {overallStats.total_reviews} user ratings
             </p>
           </div>
 
           {/* Total Reviews Count */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-2">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-              Total Student Reviews
+              Total User Reviews
             </span>
             <div className="text-3xl sm:text-4xl font-black text-slate-900">
               {overallStats.total_reviews}
@@ -336,7 +336,7 @@ export default function RatingsReviewsScreen() {
               </div>
               <h4 className="text-slate-800 font-bold text-base">No reviews recorded yet</h4>
               <p className="text-slate-400 text-xs max-w-sm mx-auto">
-                Student ratings and review comments will appear here in real time as orders are delivered.
+                User ratings and review comments will appear here in real time as orders are delivered.
               </p>
             </div>
           ) : (
@@ -350,7 +350,7 @@ export default function RatingsReviewsScreen() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h5 className="font-extrabold text-sm text-slate-900">
-                          {rev.student_name || 'Student'}
+                          {rev.student_name || 'User'}
                         </h5>
                         {rev.token_number && (
                           <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">

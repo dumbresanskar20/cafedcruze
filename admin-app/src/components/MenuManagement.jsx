@@ -819,7 +819,7 @@ export default function MenuManagement() {
                   </div>
                 )}
                 <p className="text-[10px] text-purple-700 font-medium">
-                  This rule will automatically appear in Discount Settings and apply to student orders placed before cutoff.
+                  This rule will automatically appear in Discount Settings and apply to user orders placed before cutoff.
                 </p>
               </div>
 

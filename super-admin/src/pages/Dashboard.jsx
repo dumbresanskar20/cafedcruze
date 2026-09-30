@@ -63,13 +63,13 @@ export default function Dashboard({ setActiveTab }) {
       sublabel: 'Tokens generated for kitchen',
     },
     {
-      label: 'Registered Students',
+      label: 'Registered Users',
       value: Number(stats.totalStudents || 0).toLocaleString('en-IN'),
       icon: Users,
       color: 'text-sky-400',
       bg: 'bg-sky-500/10 border-sky-500/20',
       linkTab: 'students',
-      sublabel: 'Verified campus accounts',
+      sublabel: 'Verified user accounts',
     },
     {
       label: 'Menu Dishes Active',
@@ -195,7 +195,7 @@ export default function Dashboard({ setActiveTab }) {
               </div>
               <div>
                 <h2 className="text-sm font-bold text-white">Recent Canteen Orders</h2>
-                <p className="text-[11px] text-slate-400">Live order flow from student meal portal</p>
+                <p className="text-[11px] text-slate-400">Live order flow from user meal portal</p>
               </div>
             </div>
 
@@ -219,7 +219,7 @@ export default function Dashboard({ setActiveTab }) {
                       {o.formatted_token}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-white font-bold truncate">{o.student_name || 'Student'}</p>
+                      <p className="text-white font-bold truncate">{o.student_name || 'User'}</p>
                       <p className="text-[10px] text-slate-400 capitalize">
                         {o.meal_type} • {o.payment_method}
                       </p>

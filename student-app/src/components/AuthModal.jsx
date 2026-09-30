@@ -426,14 +426,14 @@ export default function AuthModal() {
                 Cafe D Cruze <span className="text-brand-orange">Restaurant</span>
               </span>
               <span className="text-[10px] sm:text-[11px] font-semibold text-stone-500 uppercase tracking-wider block mt-0.5">
-                Official Student Portal
+                Official User Portal
               </span>
             </div>
           </div>
 
           <h2 className="text-xl sm:text-2xl font-extrabold font-display text-brand-dark">
             {mode === 'login' && 'Welcome Back!'}
-            {mode === 'signup' && 'Create Student Account'}
+            {mode === 'signup' && 'Create User Account'}
             {mode === 'otp' && 'Verify Your Email'}
             {mode === 'forgot-password' && 'Reset Your Password'}
             {mode === 'reset-password' && 'Set New Password'}

@@ -403,7 +403,7 @@ export default function ManualOrderModal({ isOpen, onClose, onOrderCreated, prin
 
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                  Link Student ID <span className="text-slate-400 font-normal">(Optional)</span>
+                  Link User ID <span className="text-slate-400 font-normal">(Optional)</span>
                 </label>
                 <input
                   type="number"

@@ -413,9 +413,9 @@ export default function Clients() {
                           className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                             c.is_student_enabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
                           }`}
-                          title="Student Portal Status"
+                          title="User Portal Status"
                         >
-                          Student: {c.is_student_enabled ? 'ON' : 'OFF'}
+                          User: {c.is_student_enabled ? 'ON' : 'OFF'}
                         </span>
                       </div>
                     </td>
@@ -656,7 +656,7 @@ export default function Clients() {
                         <span>Master Cascading Status Control</span>
                       </h4>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Suspending locks BOTH the Admin panel and Student app simultaneously via single tenant status.
+                        Suspending locks BOTH the Admin panel and User app simultaneously via single tenant status.
                       </p>
                     </div>
                   </div>
@@ -678,7 +678,7 @@ export default function Clients() {
                         className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2"
                       >
                         <Ban className="w-4 h-4" />
-                        <span>Suspend Client (Lock Both Admin & Student)</span>
+                        <span>Suspend Client (Lock Both Admin & User)</span>
                       </button>
                     )}
                   </div>
@@ -689,7 +689,7 @@ export default function Clients() {
                   <div>
                     <h4 className="text-sm font-extrabold text-white">Independent Panel Toggles</h4>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      Selectively disable either the Admin management panel or the Student meal ordering portal.
+                      Selectively disable either the Admin management panel or the User meal ordering portal.
                     </p>
                   </div>
 
@@ -716,8 +716,8 @@ export default function Clients() {
                     {/* Student Panel Toggle */}
                     <div className="py-3 flex items-center justify-between gap-4">
                       <div>
-                        <p className="text-xs font-bold text-white">Student Meal Booking Portal</p>
-                        <p className="text-[11px] text-slate-400">Controls student token ordering and menu browsing</p>
+                        <p className="text-xs font-bold text-white">User Meal Booking Portal</p>
+                        <p className="text-[11px] text-slate-400">Controls user token ordering and menu browsing</p>
                       </div>
                       <button
                         onClick={() => handleTogglePanel('student')}

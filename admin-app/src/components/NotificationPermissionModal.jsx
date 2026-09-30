@@ -30,7 +30,7 @@ export default function NotificationPermissionModal() {
             Enable Real-Time Order Alerts?
           </h3>
           <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-sm mx-auto">
-            Get instant sound chimes and desktop notification alerts the second a student places an order — even when this tab is in the background or minimized!
+            Get instant sound chimes and desktop notification alerts the second a user places an order — even when this tab is in the background or minimized!
           </p>
         </div>
 

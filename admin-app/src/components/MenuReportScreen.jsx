@@ -340,7 +340,7 @@ export default function MenuReportScreen() {
                 {reportData?.summary?.total_items_sold || 0}
               </div>
               <p className="text-[11px] font-semibold text-slate-400">
-                Portions served to students
+                Portions served to users
               </p>
             </div>
 
@@ -525,7 +525,7 @@ export default function MenuReportScreen() {
                   Raw Inventory Consumption ({reportData.period_title})
                 </h3>
                 <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                  Ingredient usage automatically deducted by prepared student orders during this selected timeframe.
+                  Ingredient usage automatically deducted by prepared user orders during this selected timeframe.
                 </p>
               </div>
 

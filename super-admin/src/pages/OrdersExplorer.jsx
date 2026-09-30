@@ -72,7 +72,7 @@ export default function OrdersExplorer() {
             <span>Orders & Sales Database</span>
           </h1>
           <p className="text-xs text-slate-400 font-medium">
-            Live database view of all student meal bookings, kitchen tokens, payment methods, and revenue
+            Live database view of all user meal bookings, kitchen tokens, payment methods, and revenue
           </p>
         </div>
 
@@ -93,7 +93,7 @@ export default function OrdersExplorer() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search token (e.g. B-001) or student..."
+            placeholder="Search token (e.g. B-001) or user..."
             className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
           />
         </form>
@@ -165,7 +165,7 @@ export default function OrdersExplorer() {
               <thead>
                 <tr className="bg-slate-900 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800 text-[10px]">
                   <th className="p-4">Token & Meal</th>
-                  <th className="p-4">Student Name & Roll No</th>
+                  <th className="p-4">User Name & Roll No</th>
                   <th className="p-4">Amount & Payment</th>
                   <th className="p-4">Order Status</th>
                   <th className="p-4">Created At</th>
@@ -195,7 +195,7 @@ export default function OrdersExplorer() {
                       </td>
 
                       <td className="p-4">
-                        <div className="font-bold text-white">{o.student_name || 'Student User'}</div>
+                        <div className="font-bold text-white">{o.student_name || 'User'}</div>
                         <div className="text-[11px] text-slate-400 font-mono">Roll: {o.student_roll_no || '—'}</div>
                       </td>
 
@@ -273,7 +273,7 @@ export default function OrdersExplorer() {
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-900 rounded-xl border border-slate-800 text-slate-300">
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Student</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">User</span>
                 <span className="font-bold text-white">{selectedOrder.student_name}</span> ({selectedOrder.student_roll_no})
               </div>
               <div>

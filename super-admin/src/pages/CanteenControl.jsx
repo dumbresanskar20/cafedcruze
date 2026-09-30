@@ -460,8 +460,8 @@ export default function CanteenControl() {
 
               <div className="py-3 flex items-center justify-between gap-4">
                 <div>
-                  <p className="font-bold text-white">Student Meal Booking Portal</p>
-                  <p className="text-[11px] text-slate-400">Controls student token generation and menu browsing</p>
+                  <p className="font-bold text-white">User Meal Booking Portal</p>
+                  <p className="text-[11px] text-slate-400">Controls user token generation and menu browsing</p>
                 </div>
                 <button
                   onClick={() => handleTogglePanel('student')}

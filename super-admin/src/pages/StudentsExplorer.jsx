@@ -46,10 +46,10 @@ export default function StudentsExplorer() {
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-white font-display tracking-tight flex items-center gap-2.5">
             <Users className="w-6 h-6 text-sky-400" />
-            <span>Registered Campus Students</span>
+            <span>Registered Users</span>
           </h1>
           <p className="text-xs text-slate-400 font-medium">
-            Database records of all registered Cafe D Cruze customers & students, verification status, and meal booking activity
+            Database records of all registered Cafe D Cruze users, verification status, and meal booking activity
           </p>
         </div>
 
@@ -70,7 +70,7 @@ export default function StudentsExplorer() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by student name, roll no, email, or phone..."
+            placeholder="Search by user name, roll no, email, or phone..."
             className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 outline-none font-medium"
           />
         </form>
@@ -80,12 +80,12 @@ export default function StudentsExplorer() {
       {loading ? (
         <div className="py-20 text-center text-slate-400 text-xs font-semibold flex flex-col items-center gap-3">
           <RefreshCw className="w-7 h-7 text-sky-500 animate-spin" />
-          <span>Querying students from database...</span>
+          <span>Querying users from database...</span>
         </div>
       ) : students.length === 0 ? (
         <div className="py-16 text-center bg-[#0f172a] rounded-3xl border border-slate-800 text-slate-400 text-xs font-medium space-y-3">
           <Users className="w-10 h-10 text-slate-600 mx-auto" />
-          <p>No student records match your search criteria.</p>
+          <p>No user records match your search criteria.</p>
         </div>
       ) : (
         <div className="bg-[#0f172a] rounded-3xl border border-slate-800 overflow-hidden shadow-xl">
@@ -93,7 +93,7 @@ export default function StudentsExplorer() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-900 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800 text-[10px]">
-                  <th className="p-4">Student Name & Roll No</th>
+                  <th className="p-4">User Name & Roll No</th>
                   <th className="p-4">Contact Info</th>
                   <th className="p-4">Verification</th>
                   <th className="p-4">Total Orders</th>
@@ -162,7 +162,7 @@ export default function StudentsExplorer() {
           {/* Pagination */}
           <div className="p-4 bg-slate-900/60 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
             <span>
-              Showing {students.length} of {totalStudents} students (Page {page} of {totalPages})
+              Showing {students.length} of {totalStudents} users (Page {page} of {totalPages})
             </span>
 
             <div className="flex items-center gap-2">

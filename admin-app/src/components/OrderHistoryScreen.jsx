@@ -674,7 +674,7 @@ export default function OrderHistoryScreen() {
                   <th className="py-3.5 px-4">Date & Time</th>
                   <th className="py-3.5 px-4">Token #</th>
                   <th className="py-3.5 px-4">Dining</th>
-                  <th className="py-3.5 px-4">Student Info</th>
+                  <th className="py-3.5 px-4">User Info</th>
                   <th className="py-3.5 px-4">Meal Type</th>
                   <th className="py-3.5 px-4">Items Ordered</th>
                   <th className="py-3.5 px-4">Order Status</th>

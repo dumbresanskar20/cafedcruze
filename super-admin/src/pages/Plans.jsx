@@ -417,7 +417,7 @@ export default function Plans() {
             <label className="block font-bold text-slate-300 mb-1">Plan Features (One per line)</label>
             <textarea
               rows={4}
-              placeholder="Unlimited student meal bookings&#10;Live Kitchen Display&#10;Inventory tracking..."
+              placeholder="Unlimited user meal bookings&#10;Live Kitchen Display&#10;Inventory tracking..."
               value={planForm.features}
               onChange={(e) => setPlanForm({ ...planForm, features: e.target.value })}
               className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono text-[11px]"

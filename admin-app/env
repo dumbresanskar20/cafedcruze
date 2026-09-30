@@ -1,0 +1,3 @@
+# Admin App Env Configurations
+VITE_API_URL=https://cafe-d-cruze-api.mealbook.in/api
+VITE_SOCKET_URL=https://cafe-d-cruze-api.mealbook.in

@@ -30,7 +30,7 @@ export default function PaymentFailureModal({
     paymentId ? `Payment ID: ${paymentId}` : '',
     amount ? `Amount: ₹${amount}` : '',
     mealType ? `Meal: ${mealType.toUpperCase()}` : '',
-    studentName ? `Student: ${studentName}` : '',
+    studentName ? `User: ${studentName}` : '',
     studentRollNo ? `Roll No: ${studentRollNo}` : '',
     `Date & Time: ${timestamp}`,
   ]

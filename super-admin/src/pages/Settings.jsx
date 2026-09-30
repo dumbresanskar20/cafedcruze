@@ -172,7 +172,7 @@ export default function Settings() {
           <h3 className="text-sm font-bold text-white">System Architecture & Isolation</h3>
         </div>
         <p className="text-slate-400 leading-relaxed">
-          The Super-Admin app is isolated from tenant operational code. All actions perform atomic MySQL mutations and broadcast real-time events to all connected clients and student terminals.
+          The Super-Admin app is isolated from tenant operational code. All actions perform atomic MySQL mutations and broadcast real-time events to all connected clients and user terminals.
         </p>
       </div>
 

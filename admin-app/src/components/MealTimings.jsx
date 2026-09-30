@@ -282,7 +282,7 @@ export default function MealTimings() {
                         </button>
                       </div>
                       <p className="text-[10px] font-extrabold text-slate-400 tracking-wider uppercase mt-0.5">
-                        SHOWN IN STUDENT APP
+                        SHOWN IN USER APP
                       </p>
                     </div>
                   </div>
@@ -358,7 +358,7 @@ export default function MealTimings() {
                     </div>
 
                     <span className="bg-amber-200/90 text-amber-900 text-[10px] font-black uppercase px-2 py-0.5 rounded-md">
-                      Shown on Student App
+                      Shown on User App
                     </span>
                   </div>
 
@@ -381,7 +381,7 @@ export default function MealTimings() {
                     <div className="sm:col-span-7">
                       <p className="text-[11px] font-medium text-amber-950 leading-relaxed">
                         Specifies when <strong className="font-bold">{w.meal_type.toLowerCase()}</strong> distribution starts.
-                        This time is displayed on the student website so students always know when meal service starts!
+                        This time is displayed on the user website so users always know when meal service starts!
                       </p>
                     </div>
                   </div>
@@ -434,7 +434,7 @@ export default function MealTimings() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 uppercase tracking-wider">
                       <span className="text-slate-400 text-sm leading-none">⊚</span>
-                      <span>LIVE STUDENT NOTE PREVIEW</span>
+                      <span>LIVE USER NOTE PREVIEW</span>
                     </div>
 
                     <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
@@ -453,7 +453,7 @@ export default function MealTimings() {
                   <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5">
                     <span>ⓘ</span>
                     <span>
-                      Visible on the student website whenever this meal category is active.
+                      Visible on the user website whenever this meal category is active.
                     </span>
                   </p>
                 </div>

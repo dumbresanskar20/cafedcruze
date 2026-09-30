@@ -43,11 +43,11 @@ export default function MealDiscountNote() {
                   🎉 Welcome Deal: {discountPercent}% OFF Active Now!
                 </span>
                 <span className="bg-purple-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-xs">
-                  New Student Perk
+                  New User Perk
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-purple-900 font-medium">
-                As a new student, enjoy flat <strong className="font-bold text-purple-950">{discountPercent}% OFF</strong> on <strong className="font-bold text-purple-950">ALL meal categories</strong> for your first <strong className="font-bold text-purple-950">{discountInfo?.new_user_discount_days || 5} days</strong>!
+                As a new user, enjoy flat <strong className="font-bold text-purple-950">{discountPercent}% OFF</strong> on <strong className="font-bold text-purple-950">ALL meal categories</strong> for your first <strong className="font-bold text-purple-950">{discountInfo?.new_user_discount_days || 5} days</strong>!
               </p>
             </div>
           </div>
