@@ -10,6 +10,10 @@ const {
   forgotPassword,
   resetPassword,
   changePassword,
+  getStudentAddresses,
+  addStudentAddress,
+  deleteStudentAddress,
+  setDefaultAddress,
 } = require('../controllers/studentAuthController');
 const { verifyStudent } = require('../middleware/authMiddleware');
 const { authLimiter, forgotPasswordLimiter, resendOtpLimiter } = require('../middleware/rateLimiter');
@@ -26,5 +30,11 @@ router.post('/reset-password', resetPassword);
 // Authenticated student routes
 router.get('/me', verifyStudent, getStudentProfile);
 router.post('/change-password', verifyStudent, changePassword);
+
+// Student delivery address management (for parcel/takeaway orders)
+router.get('/addresses', verifyStudent, getStudentAddresses);
+router.post('/addresses', verifyStudent, addStudentAddress);
+router.delete('/addresses/:id', verifyStudent, deleteStudentAddress);
+router.put('/addresses/:id/default', verifyStudent, setDefaultAddress);
 
 module.exports = router;

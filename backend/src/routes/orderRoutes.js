@@ -17,6 +17,8 @@ const {
   getRazorpayKey,
   syncOrderSchema,
   getMenuReport,
+  checkRazorpayOrderStatus,
+  reconcileRecentPayments,
 } = require('../controllers/orderController');
 const { verifyStudent, optionalStudentAuth, verifyAdmin, requireRole } = require('../middleware/authMiddleware');
 
@@ -31,8 +33,16 @@ router.post('/create-razorpay-order', verifyStudent, createRazorpayOrder);
 router.post('/verify-payment', verifyStudent, verifyPaymentAndFulfill);
 router.get('/my-orders', verifyStudent, getStudentOrders);
 
+// Check Razorpay payment status & auto-recover pending order if captured
+router.get('/check-payment-status/:razorpay_order_id', optionalStudentAuth, checkRazorpayOrderStatus);
+router.post('/check-payment-status', optionalStudentAuth, checkRazorpayOrderStatus);
+
 // Razorpay Webhook Endpoint
 router.post('/webhook', razorpayWebhook);
+
+// Admin Reconcile Payments Endpoint (recalls captured payments from Razorpay API)
+router.post('/reconcile-payments', verifyAdmin, reconcileRecentPayments);
+router.get('/reconcile-payments', verifyAdmin, reconcileRecentPayments);
 
 // Kitchen / Admin endpoints
 router.get('/kitchen-orders', verifyAdmin, getKitchenOrders);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Receipt, CheckCircle2, Maximize2, Star } from 'lucide-react';
+import { X, Receipt, CheckCircle2, Maximize2, Star, MapPin } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../services/api';
 import OrderDetailModal from './OrderDetailModal';
@@ -244,6 +244,17 @@ export default function OrderHistoryModal({ isOpen, onClose }) {
                           </div>
                         </div>
                         <Maximize2 className="w-4 h-4 text-stone-400 group-hover:text-brand-orange transition-colors shrink-0" />
+                      </div>
+                    )}
+
+                    {/* Delivery Location badge for parcel orders */}
+                    {Boolean(ord.is_parcel || ord.order_type === 'parcel') && ord.delivery_address && (
+                      <div className="p-2 bg-amber-50/70 rounded-xl border border-amber-200/70 text-[11px] text-amber-950 flex items-start gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-bold text-amber-900 block text-[9px] uppercase tracking-wider">Delivery Location:</span>
+                          <span className="font-medium text-stone-700 break-words">{ord.delivery_address}</span>
+                        </div>
                       </div>
                     )}
 

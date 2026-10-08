@@ -406,7 +406,7 @@ export default function CanteenControl() {
                 <span>Master Cascading Access & Panel Controls</span>
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Suspending the canteen immediately blocks BOTH the Admin management panel and Student meal portal.
+                Suspending the canteen immediately blocks BOTH the Admin management panel and User meal portal.
               </p>
             </div>
 
@@ -662,7 +662,7 @@ export default function CanteenControl() {
             <div>
               <p className="font-bold text-white text-sm">Cascading Suspension Notice</p>
               <p className="mt-1 leading-relaxed text-red-300">
-                Suspending Cafe D Cruze Restaurant will instantly lock access for <strong>BOTH</strong> the canteen Admin kitchen panel and the Student meal booking app until unsuspended.
+                Suspending Cafe D Cruze Restaurant will instantly lock access for <strong>BOTH</strong> the canteen Admin kitchen panel and the User meal booking app until unsuspended.
               </p>
             </div>
           </div>

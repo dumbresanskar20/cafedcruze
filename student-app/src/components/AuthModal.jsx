@@ -426,7 +426,7 @@ export default function AuthModal() {
                 Cafe D Cruze <span className="text-brand-orange">Restaurant</span>
               </span>
               <span className="text-[10px] sm:text-[11px] font-semibold text-stone-500 uppercase tracking-wider block mt-0.5">
-                Official User Portal
+                Pre Booking Portal
               </span>
             </div>
           </div>
@@ -502,7 +502,7 @@ export default function AuthModal() {
                 <input
                   type="text"
                   required
-                  placeholder="Ex: studentname@gmail.com"
+                  placeholder="Ex: username@gmail.com"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   autoComplete="off"
@@ -618,7 +618,7 @@ export default function AuthModal() {
                 <input
                   type="email"
                   required
-                  placeholder="Ex: studentname@gmail.com"
+                  placeholder="Ex: username@gmail.com"
                   value={signupEmail}
                   onChange={(e) => setSignupEmail(e.target.value)}
                   className="w-full pl-10 pr-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-orange focus:bg-white outline-none font-medium"
@@ -724,7 +724,7 @@ export default function AuthModal() {
                 <input
                   type="email"
                   required
-                  placeholder="Ex: studentname@gmail.com"
+                  placeholder="Ex: username@gmail.com"
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-2xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-orange focus:bg-white outline-none font-medium"

@@ -1066,7 +1066,7 @@ export default function Clients() {
             <div>
               <p className="font-bold text-white text-sm">Cascading Suspension Notice</p>
               <p className="mt-1 leading-relaxed text-red-300">
-                Suspending client <strong className="text-white">{selectedClient?.name}</strong> will immediately lock access for <strong>BOTH</strong> the canteen Admin management panel and the Student meal booking portal until unsuspended.
+                Suspending client <strong className="text-white">{selectedClient?.name}</strong> will immediately lock access for <strong>BOTH</strong> the canteen Admin management panel and the User meal booking portal until unsuspended.
               </p>
             </div>
           </div>

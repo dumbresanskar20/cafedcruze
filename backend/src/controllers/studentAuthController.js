@@ -681,6 +681,166 @@ const googleAuthStudent = async (req, res) => {
   }
 };
 
+// Get all saved addresses for authenticated student
+const getStudentAddresses = async (req, res) => {
+  try {
+    const studentId = req.studentId;
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const [addresses] = await pool.execute(
+      'SELECT * FROM StudentAddress WHERE student_id = ? ORDER BY is_default DESC, id DESC',
+      [studentId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      addresses: addresses || [],
+    });
+  } catch (error) {
+    console.error('Error fetching student addresses:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch addresses', error: error.message });
+  }
+};
+
+// Add new delivery address for student
+const addStudentAddress = async (req, res) => {
+  try {
+    const studentId = req.studentId;
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const { label, address_line, room_or_flat, phone, is_default } = req.body;
+    if (!address_line || !address_line.trim()) {
+      return res.status(400).json({ success: false, message: 'Address line is required.' });
+    }
+
+    const cleanLabel = (label && label.trim()) || 'Hostel';
+    const cleanAddress = address_line.trim();
+    const cleanRoom = room_or_flat ? room_or_flat.trim() : null;
+    const cleanPhone = phone ? phone.trim() : (req.student?.phone || null);
+
+    const [existing] = await pool.execute(
+      'SELECT id FROM StudentAddress WHERE student_id = ?',
+      [studentId]
+    );
+
+    const makeDefault = Boolean(is_default) || existing.length === 0;
+
+    if (makeDefault) {
+      await pool.execute(
+        'UPDATE StudentAddress SET is_default = 0 WHERE student_id = ?',
+        [studentId]
+      );
+    }
+
+    const [result] = await pool.execute(
+      `INSERT INTO StudentAddress (student_id, label, address_line, room_or_flat, phone, is_default)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [studentId, cleanLabel, cleanAddress, cleanRoom, cleanPhone, makeDefault ? 1 : 0]
+    );
+
+    const [newRow] = await pool.execute(
+      'SELECT * FROM StudentAddress WHERE id = ? LIMIT 1',
+      [result.insertId]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'Address saved successfully',
+      address: newRow[0],
+    });
+  } catch (error) {
+    console.error('Error adding student address:', error);
+    return res.status(500).json({ success: false, message: 'Failed to save address', error: error.message });
+  }
+};
+
+// Delete a saved student address
+const deleteStudentAddress = async (req, res) => {
+  try {
+    const studentId = req.studentId;
+    const addressId = req.params.id;
+
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const [existing] = await pool.execute(
+      'SELECT is_default FROM StudentAddress WHERE id = ? AND student_id = ? LIMIT 1',
+      [addressId, studentId]
+    );
+
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, message: 'Address not found' });
+    }
+
+    const wasDefault = Boolean(existing[0].is_default);
+
+    await pool.execute(
+      'DELETE FROM StudentAddress WHERE id = ? AND student_id = ?',
+      [addressId, studentId]
+    );
+
+    if (wasDefault) {
+      const [remaining] = await pool.execute(
+        'SELECT id FROM StudentAddress WHERE student_id = ? ORDER BY id DESC LIMIT 1',
+        [studentId]
+      );
+      if (remaining.length > 0) {
+        await pool.execute(
+          'UPDATE StudentAddress SET is_default = 1 WHERE id = ?',
+          [remaining[0].id]
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Address removed successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting student address:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete address', error: error.message });
+  }
+};
+
+// Set an address as default
+const setDefaultAddress = async (req, res) => {
+  try {
+    const studentId = req.studentId;
+    const addressId = req.params.id;
+
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    await pool.execute(
+      'UPDATE StudentAddress SET is_default = 0 WHERE student_id = ?',
+      [studentId]
+    );
+
+    const [result] = await pool.execute(
+      'UPDATE StudentAddress SET is_default = 1 WHERE id = ? AND student_id = ?',
+      [addressId, studentId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Address not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Default address updated successfully',
+    });
+  } catch (error) {
+    console.error('Error setting default address:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update default address', error: error.message });
+  }
+};
+
 module.exports = {
   registerStudent,
   verifyOTP,
@@ -691,4 +851,8 @@ module.exports = {
   forgotPassword,
   resetPassword,
   changePassword,
+  getStudentAddresses,
+  addStudentAddress,
+  deleteStudentAddress,
+  setDefaultAddress,
 };

@@ -185,7 +185,7 @@ export default function App() {
             <h2 className="text-base font-black text-slate-900 capitalize tracking-tight">
               {activeTab === 'kitchen' ? 'Order Fulfillment & Kitchen Operations' :
                activeTab === 'history' ? 'Order History & Sales Analytics' :
-               activeTab === 'reviews' ? 'Ratings & Student Feedback' :
+               activeTab === 'reviews' ? 'Ratings & User Feedback' :
                activeTab === 'menu' ? 'Menu & Recipe Management' :
                activeTab === 'inventory' ? 'Inventory & Stock Control' :
                activeTab === 'menu-report' ? 'Menu Sales & Performance Reports' :

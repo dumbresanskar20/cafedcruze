@@ -249,6 +249,12 @@ export default function OrderSuccessModal({ tokenNumber, order, onClose }) {
                 {currentStatus === 'ready' ? 'Ready for Pickup' : 'Paid & In Queue'}
               </span>
             </div>
+            {isParcel && order.delivery_address && (
+              <div className="flex items-start justify-between text-stone-500 pt-1 border-t border-stone-200/60">
+                <span className="shrink-0 font-medium">Delivery Address:</span>
+                <span className="font-bold text-stone-800 text-right ml-2 break-words">{order.delivery_address}</span>
+              </div>
+            )}
 
             {Number(order.discount_amount || 0) > 0 && (
               <>

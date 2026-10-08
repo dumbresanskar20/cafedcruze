@@ -95,6 +95,27 @@ const initStudentSchema = async () => {
     } catch (err) {
       console.error('⚠️ [Database] MenuItemReview table check warning:', err.message);
     }
+
+    // Ensure StudentAddress table exists for parcel orders delivery address management
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS \`StudentAddress\` (
+          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+          \`student_id\` INT NOT NULL,
+          \`label\` VARCHAR(50) NOT NULL DEFAULT 'Hostel',
+          \`address_line\` TEXT NOT NULL,
+          \`room_or_flat\` VARCHAR(100) NULL,
+          \`phone\` VARCHAR(20) NULL,
+          \`is_default\` TINYINT(1) NOT NULL DEFAULT 0,
+          \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX \`idx_addr_student\` (\`student_id\`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      console.log('✅ [Database] `StudentAddress` table verified/ready.');
+    } catch (err) {
+      console.error('⚠️ [Database] StudentAddress table check warning:', err.message);
+    }
   } catch (error) {
     console.error('⚠️ [Database] Failed to verify schema columns:', error.message);
   }

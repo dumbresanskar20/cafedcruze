@@ -125,6 +125,14 @@ const initOrderSchema = async () => {
       await safeAlter('Adding `razorpay_signature` to `Order`', 'ALTER TABLE `Order` ADD COLUMN `razorpay_signature` VARCHAR(255) NULL');
     }
 
+    if (!hasCol('is_paid')) {
+      await safeAlter('Adding `is_paid` to `Order`', 'ALTER TABLE `Order` ADD COLUMN `is_paid` TINYINT(1) NOT NULL DEFAULT 1');
+    }
+
+    if (!hasCol('delivery_address')) {
+      await safeAlter('Adding `delivery_address` to `Order`', 'ALTER TABLE `Order` ADD COLUMN `delivery_address` TEXT NULL');
+    }
+
     // 4. Backfill critical data for any rows missing date, payment_status, or order_status
     try {
       await pool.query(`

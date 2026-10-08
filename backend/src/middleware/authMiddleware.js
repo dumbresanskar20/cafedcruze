@@ -1,73 +1,14 @@
-const jwt = require('jsonwebtoken');
-const { pool } = require('../database/db');
-
-// Middleware to verify Student JWT
-const verifyStudent = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'Authentication required. No token provided.' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_access_key_change_in_production');
-
-    if (decoded.role !== 'student') {
-      return res.status(403).json({ success: false, message: 'Forbidden. Student access required.' });
-    }
-
-    const [rows] = await pool.execute(
-      'SELECT id, name, email, phone, roll_no, is_verified, created_at FROM Student WHERE id = ? LIMIT 1',
-      [decoded.id]
-    );
-    const student = rows[0] || null;
-
-    if (!student) {
-      return res.status(401).json({ success: false, message: 'Student account not found.' });
-    }
-
-    if (!student.is_verified) {
-      return res.status(403).json({ success: false, message: 'Student email/account is not verified.' });
-    }
-
-    req.user = { ...student, _id: student.id };
-    req.student = { ...student, _id: student.id };
-    req.studentId = student.id;
-    next();
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ success: false, message: 'Token expired. Please login again.' });
-    }
-    return res.status(401).json({ success: false, message: 'Invalid authentication token.' });
-  }
-};
-
-// Middleware to optionally extract Student JWT if present (does not block if absent)
-const optionalStudentAuth = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next();
-    }
-    const token = authHeader.split(' ')[1];
-    if (!token || token === 'null' || token === 'undefined') {
-      return next();
-    }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_access_key_change_in_production');
-    if (decoded.role === 'student') {
-      const [rows] = await pool.execute(
-        'SELECT id, name, email, phone, roll_no, is_verified, created_at FROM Student WHERE id = ? LIMIT 1',
-        [decoded.id]
+c[decoded.id]
       );
-      if (rows.length > 0) {
-        req.student = rows[0];
-        req.studentId = rows[0].id;
-      }
+if (rows.length > 0) {
+  req.student = rows[0];
+  req.studentId = rows[0].id;
+}
     }
   } catch (err) {
-    // Ignore invalid/expired token for optional middleware
-  }
-  next();
+  // Ignore invalid/expired token for optional middleware
+}
+next();
 };
 
 // Middleware to verify Admin JWT

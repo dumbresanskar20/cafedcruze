@@ -352,7 +352,7 @@ export default function InventoryManagement() {
         setStockTrackingEnabled(isTracking);
         showToast(
           isTracking
-            ? 'Menu Stock Tracking Activated! Portions will auto-deduct on student orders.'
+            ? 'Menu Stock Tracking Activated! Portions will auto-deduct on user orders.'
             : 'Menu Stock Tracking Deactivated. Unlimited ordering restored.'
         );
       }
@@ -423,7 +423,7 @@ export default function InventoryManagement() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-full overflow-x-hidden">
       
       {/* Toast Notification */}
       {notification && (
@@ -439,21 +439,25 @@ export default function InventoryManagement() {
         </div>
       )}
 
-      {/* Top View Mode Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
-        <div className="flex items-center gap-2 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80">
+      {/* Top View Mode Switcher (Sleek Dark Container matching photo) */}
+      <div className="bg-slate-900 p-2 sm:p-2.5 rounded-2xl sm:rounded-3xl flex items-center justify-between gap-3 shadow-md overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setActiveInventoryTab('raw')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-black text-xs transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm transition-all cursor-pointer shrink-0 ${
               activeInventoryTab === 'raw'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-orange-600 text-white shadow-md'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <span>🌾</span>
-            <span>Raw Ingredients (Warehouse)</span>
-            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">
+            <span>Raw Ingredients</span>
+            <span className={`text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-full font-bold ml-0.5 ${
+              activeInventoryTab === 'raw'
+                ? 'bg-black/30 text-white'
+                : 'bg-slate-800 text-slate-400'
+            }`}>
               {stats.totalItems} Items
             </span>
           </button>
@@ -464,55 +468,48 @@ export default function InventoryManagement() {
               setActiveInventoryTab('menu_stock');
               if (menuStockItems.length === 0) fetchMenuStock();
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-black text-xs transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm transition-all cursor-pointer shrink-0 ${
               activeInventoryTab === 'menu_stock'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-orange-600 text-white shadow-md'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <span>🍲</span>
-            <span>Prepared Menu Stock & Portions</span>
-            <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black ${
-              stockTrackingEnabled 
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                : 'bg-slate-200 text-slate-600'
+            <span>Prepared Menu Stock</span>
+            <span className={`text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-full font-bold ml-0.5 ${
+              activeInventoryTab === 'menu_stock'
+                ? 'bg-black/30 text-white'
+                : 'bg-slate-800 text-slate-400 border border-slate-700/80'
             }`}>
               {stockTrackingEnabled ? '● Tracking ON' : '○ Tracking OFF'}
             </span>
           </button>
         </div>
 
-        {activeInventoryTab === 'raw' ? (
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs transition cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Register New Ingredient</span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
+        {/* Quick Batch Actions when in Prepared Menu Stock mode */}
+        {activeInventoryTab === 'menu_stock' && (
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => fetchMenuStock()}
               disabled={loadingMenuStock}
-              className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-2 rounded-xl border border-slate-200 transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3 py-1.5 rounded-xl border border-slate-700 transition cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loadingMenuStock ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
+              <span className="hidden sm:inline">Refresh</span>
             </button>
             <button
               onClick={() => handleBatchStockReset(50)}
               disabled={saving || menuStockItems.length === 0}
-              className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer"
+              className="inline-flex items-center gap-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 font-bold text-xs px-2.5 sm:px-3 py-1.5 rounded-xl transition cursor-pointer"
             >
-              <span>Reset All to 50</span>
+              <span>Reset 50</span>
             </button>
             <button
               onClick={() => handleBatchStockReset(100)}
               disabled={saving || menuStockItems.length === 0}
-              className="inline-flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer"
+              className="inline-flex items-center gap-1 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700 font-bold text-xs px-2.5 sm:px-3 py-1.5 rounded-xl transition cursor-pointer"
             >
-              <span>Reset All to 100</span>
+              <span>Reset 100</span>
             </button>
           </div>
         )}
@@ -520,66 +517,66 @@ export default function InventoryManagement() {
 
       {activeInventoryTab === 'raw' && (
         <>
-          {/* Header Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          {/* Header Card (Matching photo with + Register New Ingredient on the right) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs">
             <div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Total Inventory</h2>
-              <p className="text-xs text-slate-500 font-semibold mt-0.5">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Total Inventory</h2>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
                 Maintain grocery items, map ingredient serving weights, and view auto-depletion records
               </p>
             </div>
 
-        <button
-          onClick={openAddModal}
-          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm px-6 py-3 rounded-2xl shadow-md transition-all active:scale-95 cursor-pointer"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Register New Item</span>
-        </button>
-      </div>
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center justify-center gap-2 bg-[#059669] hover:bg-[#047857] active:scale-95 text-white font-extrabold text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl shadow-xs transition-all cursor-pointer w-full sm:w-auto shrink-0"
+            >
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+              <span>Register New Ingredient</span>
+            </button>
+          </div>
 
-      {/* Stats Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 text-2xl font-bold">
-            📦
-          </div>
-          <div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Items</p>
-            <h3 className="text-2xl font-black text-slate-900">{stats.totalItems}</h3>
-          </div>
-        </div>
+          {/* Stats Summary Cards (Responsive 2x2 grid on mobile, 4-col on desktop) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 text-xl sm:text-2xl font-bold shrink-0">
+                📦
+              </div>
+              <div className="min-w-0">
+                <p className="text-slate-400 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider truncate">Total Items</p>
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900">{stats.totalItems}</h3>
+              </div>
+            </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-emerald-600 text-2xl font-bold border border-emerald-100">
-            🌱
-          </div>
-          <div>
-            <p className="text-emerald-600/70 text-[10px] font-bold uppercase tracking-wider">Active Stock</p>
-            <h3 className="text-2xl font-black text-emerald-800">{stats.activeItems}</h3>
-          </div>
-        </div>
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl sm:text-2xl font-bold border border-emerald-100 shrink-0">
+                🌱
+              </div>
+              <div className="min-w-0">
+                <p className="text-emerald-600/70 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider truncate">Active Stock</p>
+                <h3 className="text-xl sm:text-2xl font-black text-emerald-800">{stats.activeItems}</h3>
+              </div>
+            </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold ${stats.outOfStockCount > 0 ? 'bg-red-50 text-red-600 border border-red-100 animate-pulse' : 'bg-slate-100 text-slate-400'}`}>
-            🚨
-          </div>
-          <div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Out of Stock</p>
-            <h3 className={`text-2xl font-black ${stats.outOfStockCount > 0 ? 'text-red-600' : 'text-slate-900'}`}>{stats.outOfStockCount}</h3>
-          </div>
-        </div>
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3 sm:gap-4">
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl font-bold shrink-0 ${stats.outOfStockCount > 0 ? 'bg-red-50 text-red-600 border border-red-100 animate-pulse' : 'bg-slate-100 text-slate-400'}`}>
+                🚨
+              </div>
+              <div className="min-w-0">
+                <p className="text-slate-400 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider truncate">Out of Stock</p>
+                <h3 className={`text-xl sm:text-2xl font-black ${stats.outOfStockCount > 0 ? 'text-red-600' : 'text-slate-900'}`}>{stats.outOfStockCount}</h3>
+              </div>
+            </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold ${stats.lowStockCount > 0 ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-slate-100 text-slate-400'}`}>
-            ⚠️
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3 sm:gap-4">
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl font-bold shrink-0 ${stats.lowStockCount > 0 ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-slate-100 text-slate-400'}`}>
+                ⚠️
+              </div>
+              <div className="min-w-0">
+                <p className="text-slate-400 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider truncate">Low Stock Level</p>
+                <h3 className={`text-xl sm:text-2xl font-black ${stats.lowStockCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{stats.lowStockCount}</h3>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Low Stock Level</p>
-            <h3 className={`text-2xl font-black ${stats.lowStockCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{stats.lowStockCount}</h3>
-          </div>
-        </div>
-      </div>
 
       {/* Grid: Low Stock Alerts & Recent Logs */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -641,7 +638,7 @@ export default function InventoryManagement() {
             )}
           </div>
           <div className="pt-2 text-[10px] text-slate-400 font-semibold text-center border-t border-slate-100">
-            *Depleted items will disable linked student meals
+            *Depleted items will disable linked user meals
           </div>
         </div>
 
@@ -707,13 +704,13 @@ export default function InventoryManagement() {
 
       </div>
 
-      {/* Main Stock Table */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+      {/* Main Stock Table & Catalog */}
+      <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs space-y-4">
         
-        {/* Filters and Search */}
-        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+        {/* Filters and Search (Mobile-friendly responsive wrap) */}
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+          <div className="relative w-full sm:w-72 md:w-80">
+            <Search className="absolute left-3 top-2.5 sm:top-3 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search by ingredient name or unique ID..."
@@ -726,8 +723,8 @@ export default function InventoryManagement() {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2">
+            <div className="flex gap-1.5 sm:gap-2">
               <button
                 onClick={() => {
                   const collapsed = {};
@@ -736,7 +733,7 @@ export default function InventoryManagement() {
                   });
                   setCollapsedCategories(collapsed);
                 }}
-                className="px-3.5 py-1.5 rounded-xl border text-[11px] font-extrabold text-slate-700 bg-white hover:bg-slate-50 transition shadow-sm cursor-pointer"
+                className="px-3 py-1.5 rounded-xl border text-[10px] sm:text-[11px] font-extrabold text-slate-700 bg-white hover:bg-slate-50 transition shadow-2xs cursor-pointer"
               >
                 Collapse All
               </button>
@@ -744,13 +741,13 @@ export default function InventoryManagement() {
                 onClick={() => {
                   setCollapsedCategories({});
                 }}
-                className="px-3.5 py-1.5 rounded-xl border text-[11px] font-extrabold text-slate-700 bg-white hover:bg-slate-50 transition shadow-sm cursor-pointer"
+                className="px-3 py-1.5 rounded-xl border text-[10px] sm:text-[11px] font-extrabold text-slate-700 bg-white hover:bg-slate-50 transition shadow-2xs cursor-pointer"
               >
                 Expand All
               </button>
             </div>
 
-            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200 font-semibold">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 font-semibold">
               {[
                 { id: 'all', label: 'All Items' },
                 { id: 'active', label: 'Active Only' },
@@ -762,8 +759,8 @@ export default function InventoryManagement() {
                     setFilterActive(opt.id);
                     setPage(1);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                    filterActive === opt.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200'
+                  className={`px-2.5 sm:px-3 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
+                    filterActive === opt.id ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
                   }`}
                 >
                   {opt.label}
@@ -845,93 +842,176 @@ export default function InventoryManagement() {
 
                     {/* Category Body */}
                     {!isCollapsed && (
-                      <div className="p-4 bg-white">
+                      <div className="p-3 sm:p-4 bg-white">
                         {filteredCatItems.length === 0 ? (
                           <div className="text-center py-6 text-slate-400 text-xs font-semibold">
                             No active items in this category.
                           </div>
                         ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                              <thead>
-                                <tr className="border-b border-slate-200 text-slate-400 text-[10px] uppercase font-extrabold tracking-wider">
-                                  <th className="pb-3 pl-2">ID Code</th>
-                                  <th className="pb-3">Name</th>
-                                  <th className="pb-3">Stock Level</th>
-                                  <th className="pb-3">Unit</th>
-                                  <th className="pb-3">Alert Threshold</th>
-                                  <th className="pb-3">Status</th>
-                                  <th className="pb-3 text-right pr-2">Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody className="text-xs divide-y divide-slate-100 font-medium">
-                                {filteredCatItems.map((item) => {
-                                  const qty = Number(item.quantity_in_stock);
-                                  const isLow = qty <= Number(item.low_stock_threshold);
-                                  const isOutOfStock = qty <= 0;
+                          <>
+                            {/* Mobile Card List View (Visible on screens < md) */}
+                            <div className="md:hidden space-y-2.5">
+                              {filteredCatItems.map((item) => {
+                                const qty = Number(item.quantity_in_stock);
+                                const isLow = qty <= Number(item.low_stock_threshold);
+                                const isOutOfStock = qty <= 0;
 
-                                  return (
-                                    <tr key={item.id} className="hover:bg-slate-50/50 transition">
-                                      <td className="py-3.5 pl-2 font-mono font-bold text-slate-500">
-                                        {item.unique_inventory_id}
-                                      </td>
-                                      <td className="py-3.5 font-bold text-slate-800">
-                                        {item.name}
-                                      </td>
-                                      <td className="py-3.5">
-                                        <span className={`font-black text-sm ${
-                                          isOutOfStock ? 'text-red-600' : isLow ? 'text-amber-500' : 'text-slate-800'
-                                        }`}>
-                                          {qty}
+                                return (
+                                  <div key={item.id} className="p-3 bg-slate-50/70 rounded-xl border border-slate-200/80 space-y-2.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <span className="font-mono text-[10px] font-bold text-slate-400 block">
+                                          {item.unique_inventory_id}
                                         </span>
-                                        {isLow && (
-                                          <span className={`ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                            isOutOfStock ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
-                                          }`}>
-                                            {isOutOfStock ? 'Depleted' : 'Low'}
+                                        <h4 className="font-extrabold text-sm text-slate-900 leading-tight truncate">
+                                          {item.name}
+                                        </h4>
+                                      </div>
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                                        item.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-400'
+                                      }`}>
+                                        {item.is_active ? 'Active' : 'Inactive'}
+                                      </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-100">
+                                      <div>
+                                        <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Current Stock</span>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <span className={`font-black text-sm ${isOutOfStock ? 'text-red-600' : isLow ? 'text-amber-500' : 'text-slate-800'}`}>
+                                            {qty} {item.unit}
                                           </span>
-                                        )}
-                                      </td>
-                                      <td className="py-3.5 text-slate-500 font-semibold">{item.unit}</td>
-                                      <td className="py-3.5 text-slate-500">{item.low_stock_threshold} {item.unit}</td>
-                                      <td className="py-3.5">
-                                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                                          item.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-400'
-                                        }`}>
-                                          {item.is_active ? 'Active' : 'Inactive'}
-                                        </span>
-                                      </td>
-                                      <td className="py-3.5 text-right pr-2">
-                                        <div className="inline-flex gap-1.5">
-                                          <button
-                                            onClick={() => openRestockModal(item)}
-                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border hover:bg-slate-100 text-slate-700 font-extrabold text-[10px] transition shadow-sm cursor-pointer"
-                                          >
-                                            <Scale className="w-3.5 h-3.5" />
-                                            <span>Restock</span>
-                                          </button>
-                                          <button
-                                            onClick={() => openEditModal(item)}
-                                            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer"
-                                            title="Edit"
-                                          >
-                                            <Edit2 className="w-4 h-4" />
-                                          </button>
-                                          <button
-                                            onClick={() => openLogsModal(item)}
-                                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                                            title="Activity Logs"
-                                          >
-                                            <History className="w-4 h-4" />
-                                          </button>
+                                          {isLow && (
+                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                              isOutOfStock ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                                            }`}>
+                                              {isOutOfStock ? 'Depleted' : 'Low'}
+                                            </span>
+                                          )}
                                         </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
+                                      </div>
+
+                                      <div>
+                                        <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Alert Threshold</span>
+                                        <span className="text-slate-700 font-bold block mt-0.5">
+                                          {item.low_stock_threshold} {item.unit}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+                                      <button
+                                        onClick={() => openRestockModal(item)}
+                                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 font-extrabold text-xs shadow-2xs transition active:scale-95 cursor-pointer"
+                                      >
+                                        <Scale className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Restock</span>
+                                      </button>
+
+                                      <button
+                                        onClick={() => openEditModal(item)}
+                                        className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 transition shadow-2xs cursor-pointer"
+                                        title="Edit"
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+
+                                      <button
+                                        onClick={() => openLogsModal(item)}
+                                        className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-emerald-600 transition shadow-2xs cursor-pointer"
+                                        title="Activity Logs"
+                                      >
+                                        <History className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Desktop Table View (Hidden on screens < md) */}
+                            <div className="hidden md:block overflow-x-auto">
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className="border-b border-slate-200 text-slate-400 text-[10px] uppercase font-extrabold tracking-wider">
+                                    <th className="pb-3 pl-2">ID Code</th>
+                                    <th className="pb-3">Name</th>
+                                    <th className="pb-3">Stock Level</th>
+                                    <th className="pb-3">Unit</th>
+                                    <th className="pb-3">Alert Threshold</th>
+                                    <th className="pb-3">Status</th>
+                                    <th className="pb-3 text-right pr-2">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="text-xs divide-y divide-slate-100 font-medium">
+                                  {filteredCatItems.map((item) => {
+                                    const qty = Number(item.quantity_in_stock);
+                                    const isLow = qty <= Number(item.low_stock_threshold);
+                                    const isOutOfStock = qty <= 0;
+
+                                    return (
+                                      <tr key={item.id} className="hover:bg-slate-50/50 transition">
+                                        <td className="py-3.5 pl-2 font-mono font-bold text-slate-500">
+                                          {item.unique_inventory_id}
+                                        </td>
+                                        <td className="py-3.5 font-bold text-slate-800">
+                                          {item.name}
+                                        </td>
+                                        <td className="py-3.5">
+                                          <span className={`font-black text-sm ${
+                                            isOutOfStock ? 'text-red-600' : isLow ? 'text-amber-500' : 'text-slate-800'
+                                          }`}>
+                                            {qty}
+                                          </span>
+                                          {isLow && (
+                                            <span className={`ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                              isOutOfStock ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                                            }`}>
+                                              {isOutOfStock ? 'Depleted' : 'Low'}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-3.5 text-slate-500 font-semibold">{item.unit}</td>
+                                        <td className="py-3.5 text-slate-500">{item.low_stock_threshold} {item.unit}</td>
+                                        <td className="py-3.5">
+                                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                                            item.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-400'
+                                          }`}>
+                                            {item.is_active ? 'Active' : 'Inactive'}
+                                          </span>
+                                        </td>
+                                        <td className="py-3.5 text-right pr-2">
+                                          <div className="inline-flex gap-1.5">
+                                            <button
+                                              onClick={() => openRestockModal(item)}
+                                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border hover:bg-slate-100 text-slate-700 font-extrabold text-[10px] transition shadow-sm cursor-pointer"
+                                            >
+                                              <Scale className="w-3.5 h-3.5" />
+                                              <span>Restock</span>
+                                            </button>
+                                            <button
+                                              onClick={() => openEditModal(item)}
+                                              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                              title="Edit"
+                                            >
+                                              <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                              onClick={() => openLogsModal(item)}
+                                              className="p-1.5 rounded-lg text-emerald-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                              title="Activity Logs"
+                                            >
+                                              <History className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
                         )}
                       </div>
                     )}
@@ -973,11 +1053,11 @@ export default function InventoryManagement() {
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                   {stockTrackingEnabled ? (
                     <>
-                      <strong className="text-emerald-300">Portion deduction is ACTIVE.</strong> When students place orders, portion quantities are deducted in real-time. Dishes reaching 0 portions are automatically switched to <strong className="text-red-300">Out of Stock</strong>. If a student tries to order more portions than available, a real-time warning popup alerts them and the order is prevented.
+                      <strong className="text-emerald-300">Portion deduction is ACTIVE.</strong> When users place orders, portion quantities are deducted in real-time. Dishes reaching 0 portions are automatically switched to <strong className="text-red-300">Out of Stock</strong>. If a user tries to order more portions than available, a real-time warning popup alerts them and the order is prevented.
                     </>
                   ) : (
                     <>
-                      <strong className="text-amber-300">Portion deduction is INACTIVE.</strong> Students can order meals freely without portion limits. Stock quantities below can still be configured and updated as kitchen preparation references, but no deductions or portion cap warnings will be enforced.
+                      <strong className="text-amber-300">Portion deduction is INACTIVE.</strong> Users can order meals freely without portion limits. Stock quantities below can still be configured and updated as kitchen preparation references, but no deductions or portion cap warnings will be enforced.
                     </>
                   )}
                 </p>
@@ -1362,8 +1442,8 @@ export default function InventoryManagement() {
 
       {/* Add / Edit Inventory Modal */}
       {isAddEditOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 space-y-4 border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-4 sm:p-6 space-y-4 border border-slate-200 max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900">
                 {editingItem ? 'Edit Inventory Item' : 'Register Grocery Item'}
@@ -1475,8 +1555,8 @@ export default function InventoryManagement() {
 
       {/* Restock Modal */}
       {isRestockOpen && restockingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-xs w-full p-6 space-y-4 border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-4 sm:p-6 space-y-4 border border-slate-200 max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Restock Ingredient</h3>
@@ -1530,7 +1610,7 @@ export default function InventoryManagement() {
       {/* Logs Modal (History drawer) */}
       {isLogsOpen && loggingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white h-full w-full max-w-md p-6 flex flex-col justify-between border-l border-slate-200 animate-in slide-in-from-right duration-250">
+          <div className="bg-white h-full w-full max-w-md p-4 sm:p-6 flex flex-col justify-between border-l border-slate-200 animate-in slide-in-from-right duration-250">
             <div className="space-y-4 overflow-y-auto flex-1">
               <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                 <div>

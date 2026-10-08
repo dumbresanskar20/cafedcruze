@@ -142,7 +142,13 @@ app.use(
 );
 app.options('*', cors());
 
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static local uploads (images stored in cPanel local storage) with 1-day browser cache

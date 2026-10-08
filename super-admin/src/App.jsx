@@ -47,8 +47,8 @@ export default function App() {
         };
       case 'students':
         return { 
-          title: 'Registered Students Database', 
-          subtitle: 'Inspect verified campus student accounts, roll numbers, and total spending' 
+          title: 'Registered Users Database', 
+          subtitle: 'Inspect verified user accounts, roll numbers, and total spending' 
         };
       case 'menu':
         return { 

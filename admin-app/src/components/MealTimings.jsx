@@ -429,7 +429,7 @@ export default function MealTimings() {
                   </div>
                 )}
 
-                {/* 5. Live Student Note Preview */}
+                {/* 5. Live User Note Preview */}
                 <div className="border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5 bg-slate-50/40">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 uppercase tracking-wider">

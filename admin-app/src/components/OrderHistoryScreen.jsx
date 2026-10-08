@@ -684,7 +684,7 @@ export default function OrderHistoryScreen() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
                 {orders.map((ord) => {
-                  const studentName = ord.student?.name || ord.student_id?.name || ord.student_name || 'Student';
+                  const studentName = ord.student?.name || ord.student_id?.name || ord.student_name || 'User';
                   const rollNo = ord.student?.roll_no || ord.student_id?.roll_no || ord.student_roll_no || '';
                   const pmInfo = formatPaymentMethod(ord.payment_method);
                   const PmIcon = pmInfo.icon;

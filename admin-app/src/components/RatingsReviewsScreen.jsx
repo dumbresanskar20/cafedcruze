@@ -345,7 +345,7 @@ export default function RatingsReviewsScreen() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
-                      {rev.student_name ? rev.student_name.charAt(0).toUpperCase() : 'S'}
+                      {rev.student_name ? rev.student_name.charAt(0).toUpperCase() : 'U'}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">

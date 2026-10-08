@@ -11,8 +11,11 @@ import {
   Grid,
   List,
   Plus,
-  Timer,
   X,
+  MapPin,
+  Truck,
+  Phone,
+  User,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAdminAuth } from '../context/AdminAuthContext';
@@ -44,9 +47,29 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
   const [todayIncome, setTodayIncome] = useState(null);
   const [renewModalOpen, setRenewModalOpen] = useState(false);
   const [manualOrderModalOpen, setManualOrderModalOpen] = useState(false);
+  const [syncingPayments, setSyncingPayments] = useState(false);
 
   const isStaff = isStaffFullscreen || admin?.role === 'staff';
   const isAdminOrSuperAdmin = !isStaff;
+
+  const handleSyncRazorpayPayments = async () => {
+    try {
+      setSyncingPayments(true);
+      const res = await api.post('/orders/reconcile-payments');
+      if (res.data?.success) {
+        if (res.data.reconciled_count > 0) {
+          alert(`✅ Successfully reconciled ${res.data.reconciled_count} online payment(s)! Tokens generated and added to queue.`);
+        } else {
+          alert('All online Razorpay payments are already verified and synced.');
+        }
+        await fetchKitchenData();
+      }
+    } catch (err) {
+      alert(`Sync failed: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setSyncingPayments(false);
+    }
+  };
 
   const handleManualOrderCreated = (newOrder) => {
     // Add new order to top of list immediately
@@ -67,19 +90,10 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
     todays_menu_summary: [],
   });
 
-  // Real-time Parcel Timers & Sockets
+  // Real-time Sockets & Token Details Modal State
   const adminSocketRef = useRef(null);
   const broadcastChannelRef = useRef(null);
-  const [parcelTimers, setParcelTimers] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('mess_parcel_timers') || '{}');
-    } catch {
-      return {};
-    }
-  });
-  const [activeTimerDropdownId, setActiveTimerDropdownId] = useState(null);
-  const [customMinutes, setCustomMinutes] = useState('');
-  const [now, setNow] = useState(Date.now());
+  const [selectedTokenDetailOrder, setSelectedTokenDetailOrder] = useState(null);
 
   // Fetch today's orders & summary counts
   const fetchKitchenData = async () => {
@@ -124,79 +138,122 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
     }
   };
 
-  // Clock ticker for real-time timer countdowns
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // Helper to parse address into primary, secondary and meta lines
+  const parseAddressLines = (addrStr) => {
+    if (!addrStr || typeof addrStr !== 'string') return null;
+    const cleaned = addrStr.trim();
+    if (!cleaned) return null;
 
-  // BroadcastChannel for instant cross-tab real-time sync
+    const rawSegments = cleaned.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+    if (rawSegments.length === 0) return { primary: cleaned, secondary: '', meta: '' };
+
+    let pincode = '';
+    let contact = '';
+    const remaining = [];
+
+    rawSegments.forEach((seg) => {
+      const pinMatch = seg.match(/(?:pincode|pin)[:\s]*([0-9]{5,6})/i);
+      const contactMatch = seg.match(/(?:contact|ph|phone|mobile)[:\s]*([0-9\+\-\s]{7,})/i);
+
+      if (pinMatch) {
+        pincode = pinMatch[1].trim();
+      } else if (contactMatch) {
+        contact = contactMatch[1].trim();
+      } else {
+        remaining.push(seg);
+      }
+    });
+
+    const primary = remaining[0] || cleaned;
+    const secondary = remaining.slice(1).join(', ');
+    const metaParts = [];
+    if (pincode) metaParts.push(`Pincode: ${pincode}`);
+    if (contact) metaParts.push(`Contact: ${contact}`);
+
+    return {
+      primary,
+      secondary,
+      meta: metaParts.join(' • '),
+    };
+  };
+
+  // Helper to extract phone number for modal
+  const getStudentPhone = (order) => {
+    if (!order) return 'Not Available';
+    if (order.student_id?.phone) return order.student_id.phone;
+    if (order.student_phone) return order.student_phone;
+    if (order.phone) return order.phone;
+    if (order.mobile) return order.mobile;
+    if (order.delivery_address) {
+      const m = order.delivery_address.match(/(?:contact|ph|phone|mobile)[:\s]*([0-9\+\-\s]{7,})/i);
+      if (m) return m[1].trim();
+    }
+    return 'Not Available';
+  };
+
+  // Helper to format token badge display (#T - 001)
+  const formatTokenDisplay = (tokenNum) => {
+    if (!tokenNum) return { prefix: '#T -', number: '001' };
+    const str = String(tokenNum).trim();
+    const match = str.match(/^#?([A-Za-z]+)[\s\-_]*([0-9A-Za-z]+)$/);
+    if (match) {
+      return {
+        prefix: `#${match[1].toUpperCase()} -`,
+        number: match[2],
+      };
+    }
+    return {
+      prefix: '#T -',
+      number: str.replace(/^#/, ''),
+    };
+  };
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSelectedTokenDetailOrder(null);
+      }
+    };
+    if (selectedTokenDetailOrder) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedTokenDetailOrder]);
+
+  // BroadcastChannel for instant cross-tab real-time status sync
   useEffect(() => {
     if (typeof BroadcastChannel !== 'undefined') {
       const channel = new BroadcastChannel('mess_parcel_channel');
       broadcastChannelRef.current = channel;
       channel.onmessage = (event) => {
-        if (event.data?.type === 'TIMER_SET') {
-          setParcelTimers((prev) => ({
-            ...prev,
-            [event.data.payload.orderId]: event.data.payload,
-          }));
-        } else if (event.data?.type === 'TIMER_CLEARED') {
-          setParcelTimers((prev) => {
-            const copy = { ...prev };
-            delete copy[event.data.payload.orderId];
-            return copy;
-          });
+        if (event.data?.type === 'STATUS_UPDATED') {
+          const payload = event.data.payload;
+          const targetId = String(payload.orderId || payload.id);
+          setOrders((prev) =>
+            prev.map((o) =>
+              String(o._id || o.id) === targetId
+                ? { ...o, order_status: payload.order_status }
+                : o
+            )
+          );
+          setSelectedTokenDetailOrder((prev) =>
+            prev && String(prev._id || prev.id) === targetId
+              ? { ...prev, order_status: payload.order_status }
+              : prev
+          );
         }
       };
       return () => channel.close();
     }
   }, []);
 
-  // Clear parcel timer
-  const clearParcelTimer = (orderId) => {
+  // Handle Mark Out For Delivery for Parcel Orders
+  const handleMarkOutForDelivery = async (orderId) => {
     const idStr = String(orderId);
     const ord = orders.find((o) => String(o._id || o.id) === idStr);
     const tokenNumber = ord?.token_number;
     const studentId = ord?.student_id?.id || ord?.student_id?._id || ord?.student_id;
-
-    setParcelTimers((prev) => {
-      const updated = { ...prev };
-      delete updated[orderId];
-      delete updated[idStr];
-      delete updated[Number(orderId)];
-      if (tokenNumber) {
-        delete updated[tokenNumber];
-        delete updated[String(tokenNumber)];
-      }
-      localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
-      return updated;
-    });
-
-    const payload = {
-      orderId: idStr,
-      token_number: tokenNumber,
-      studentId: studentId,
-    };
-
-    if (broadcastChannelRef.current) {
-      broadcastChannelRef.current.postMessage({ type: 'TIMER_CLEARED', payload });
-    }
-    if (adminSocketRef.current) {
-      adminSocketRef.current.emit('order:timer_cleared', payload);
-    }
-  };
-
-  // Handle Mark Ready status update for Parcel Orders
-  const handleMarkReady = async (orderId) => {
-    const idStr = String(orderId);
-    const ord = orders.find((o) => String(o._id || o.id) === idStr);
-    const tokenNumber = ord?.token_number;
-    const studentId = ord?.student_id?.id || ord?.student_id?._id || ord?.student_id;
-
-    clearParcelTimer(idStr);
 
     const previousOrders = [...orders];
     const previousCounts = { ...orderCounts };
@@ -204,87 +261,55 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
     // 1. Optimistically update local state
     setOrders((prev) =>
       prev.map((o) =>
-        String(o._id || o.id) === idStr ? { ...o, order_status: 'ready' } : o
+        String(o._id || o.id) === idStr ? { ...o, order_status: 'out_for_delivery' } : o
       )
     );
 
-    const readyPayload = {
+    setSelectedTokenDetailOrder((prev) =>
+      prev && String(prev._id || prev.id) === idStr
+        ? { ...prev, order_status: 'out_for_delivery' }
+        : prev
+    );
+
+    const outPayload = {
       orderId: idStr,
+      id: idStr,
       token_number: tokenNumber,
       studentId: studentId,
-      order_status: 'ready',
+      order_status: 'out_for_delivery',
     };
 
     // 2. Broadcast across tabs and socket immediately
     if (broadcastChannelRef.current) {
       broadcastChannelRef.current.postMessage({
         type: 'STATUS_UPDATED',
-        payload: readyPayload,
+        payload: outPayload,
       });
     }
     if (adminSocketRef.current) {
-      adminSocketRef.current.emit('order:status_updated', readyPayload);
+      adminSocketRef.current.emit('order:status_updated', outPayload);
     }
 
     // 3. Persist status update to database
     try {
       const res = await api.patch(`/orders/status/${idStr}`, {
-        order_status: 'ready',
+        order_status: 'out_for_delivery',
       });
 
       if (res.data?.success && res.data?.orderCounts) {
         setOrderCounts(res.data.orderCounts);
       }
     } catch (err) {
-      console.error('Failed to mark order as ready:', err);
-      // Revert optimistic update only on error
+      console.error('Failed to mark order as out for delivery:', err);
       setOrders(previousOrders);
       setOrderCounts(previousCounts);
+      setSelectedTokenDetailOrder((prev) =>
+        prev && String(prev._id || prev.id) === idStr
+          ? { ...prev, order_status: ord?.order_status }
+          : prev
+      );
+      alert('Failed to update status to Out For Delivery. Please check your network connection.');
     }
-  };
-
-  // Handle Set Parcel Countdown Timer
-  const handleSetParcelTimer = (ord, minutes) => {
-    const orderId = String(ord._id || ord.id);
-    const mins = parseInt(minutes, 10);
-    if (isNaN(mins) || mins <= 0) return;
-    const readyAt = Date.now() + mins * 60 * 1000;
-    const timerData = {
-      orderId,
-      token_number: ord.token_number,
-      studentId: ord.student_id?.id || ord.student_id?._id || ord.student_id,
-      readyAt,
-      minutes: mins,
-    };
-
-    setParcelTimers((prev) => {
-      const updated = { ...prev, [orderId]: timerData };
-      if (ord.token_number) {
-        updated[String(ord.token_number)] = timerData;
-      }
-      localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
-      return updated;
-    });
-
-    if (broadcastChannelRef.current) {
-      broadcastChannelRef.current.postMessage({ type: 'TIMER_SET', payload: timerData });
-    }
-    if (adminSocketRef.current) {
-      adminSocketRef.current.emit('order:timer_set', timerData);
-    }
-
-    setActiveTimerDropdownId(null);
-    setCustomMinutes('');
-  };
-
-  // Format remaining time MM:SS
-  const formatTimeRemaining = (orderId) => {
-    const timer = parcelTimers[orderId] || parcelTimers[String(orderId)];
-    if (!timer || !timer.readyAt) return '';
-    const diff = Math.max(0, Math.floor((timer.readyAt - now) / 1000));
-    const m = Math.floor(diff / 60);
-    const s = diff % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   // Handle Mark Delivered status update
@@ -293,8 +318,6 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
     const ord = orders.find((o) => String(o._id || o.id) === idStr);
     const tokenNumber = ord?.token_number;
     const studentId = ord?.student_id?.id || ord?.student_id?._id || ord?.student_id;
-
-    clearParcelTimer(idStr);
 
     const previousOrders = [...orders];
     const previousCounts = { ...orderCounts };
@@ -305,8 +328,15 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
       )
     );
 
+    setSelectedTokenDetailOrder((prev) =>
+      prev && String(prev._id || prev.id) === idStr
+        ? { ...prev, order_status: 'delivered' }
+        : prev
+    );
+
     const deliveredPayload = {
       orderId: idStr,
+      id: idStr,
       token_number: tokenNumber,
       studentId: studentId,
       order_status: 'delivered',
@@ -334,34 +364,14 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
       console.error('Failed to mark order as delivered:', err);
       setOrders(previousOrders);
       setOrderCounts(previousCounts);
+      setSelectedTokenDetailOrder((prev) =>
+        prev && String(prev._id || prev.id) === idStr
+          ? { ...prev, order_status: ord?.order_status }
+          : prev
+      );
       alert('Failed to update status. Please check your network connection.');
     }
   };
-
-  // Keep track of orders currently transitioning to ready to prevent duplicate API triggers
-  const transitioningRef = useRef(new Set());
-
-  // Auto-transition parcel orders to 'ready' when timer reaches zero
-  useEffect(() => {
-    Object.entries(parcelTimers).forEach(([orderId, timerInfo]) => {
-      if (timerInfo && timerInfo.readyAt && timerInfo.readyAt <= now) {
-        const idStr = String(orderId);
-        if (transitioningRef.current.has(idStr)) return;
-        transitioningRef.current.add(idStr);
-
-        const ord = orders.find((o) => String(o._id || o.id) === idStr);
-        if (ord && (ord.order_status === 'delivered' || ord.order_status === 'cancelled')) {
-          clearParcelTimer(idStr);
-          transitioningRef.current.delete(idStr);
-          return;
-        }
-
-        handleMarkReady(idStr).finally(() => {
-          transitioningRef.current.delete(idStr);
-        });
-      }
-    });
-  }, [now, parcelTimers, orders]);
 
   // Socket.IO Real-time setup + 15s polling fallback
   useEffect(() => {
@@ -409,35 +419,19 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
 
     // Real-time status update listener
     socket.on('order:status_updated', (updatedData) => {
+      const targetId = String(updatedData.orderId || updatedData.id);
       setOrders((prev) =>
         prev.map((o) =>
-          (o._id || o.id) === (updatedData.orderId || updatedData.id)
+          String(o._id || o.id) === targetId
             ? { ...o, order_status: updatedData.order_status }
             : o
         )
       );
-    });
-
-    // Real-time parcel timer updates from other sessions
-    socket.on('parcel:timer_updated', (timerData) => {
-      if (timerData && timerData.orderId) {
-        setParcelTimers((prev) => {
-          const updated = { ...prev, [timerData.orderId]: timerData };
-          localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
-          return updated;
-        });
-      }
-    });
-
-    socket.on('parcel:timer_cleared', (timerData) => {
-      if (timerData && timerData.orderId) {
-        setParcelTimers((prev) => {
-          const updated = { ...prev };
-          delete updated[timerData.orderId];
-          localStorage.setItem('mess_parcel_timers', JSON.stringify(updated));
-          return updated;
-        });
-      }
+      setSelectedTokenDetailOrder((prev) =>
+        prev && String(prev._id || prev.id) === targetId
+          ? { ...prev, order_status: updatedData.order_status }
+          : prev
+      );
     });
 
     // Real-time aggregate count listener
@@ -550,7 +544,7 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
           </div>
           <div class="details">
             <div><strong>Date:</strong> ${dateStr}</div>
-            <div><strong>${isWalkIn ? 'Customer' : 'Student'}:</strong> ${customerOrStudentName} ${rollNo ? `(${rollNo})` : ''}</div>
+            <div><strong>${isWalkIn ? 'Customer' : 'User'}:</strong> ${customerOrStudentName} ${rollNo ? `(${rollNo})` : ''}</div>
             <div><strong>Meal Window:</strong> ${mealType}</div>
             <div><strong>Dining:</strong> ${(order.is_parcel || order.order_type === 'parcel') ? '📦 PARCEL (TAKEAWAY)' : '🍽️ DINE IN'}</div>
             <div><strong>Payment:</strong> ${paymentMethodDisplay} (PAID)</div>
@@ -769,6 +763,18 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
+
+          {isAdminOrSuperAdmin && (
+            <button
+              onClick={handleSyncRazorpayPayments}
+              disabled={syncingPayments}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+              title="Check and reconcile any pending online payments directly from Razorpay"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncingPayments ? 'animate-spin text-amber-700' : 'text-amber-700'}`} />
+              <span>{syncingPayments ? 'Syncing...' : 'Sync Payments'}</span>
+            </button>
+          )}
 
           {/* Sound & Notification Alert Controls */}
           <AlertControls isDarkHeader={false} />
@@ -1046,7 +1052,7 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search token number or student..."
+                  placeholder="Search token number or user..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-2xl text-xs focus:ring-2 focus:ring-amber-500 outline-none font-semibold text-slate-700 bg-slate-50"
@@ -1097,39 +1103,51 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
                 {filteredTokenList.map((ord) => {
                   const ordId = ord._id || ord.id;
-                  const ordIdStr = String(ordId);
                   const isWalkIn = Boolean(ord.customer_name);
                   const studentName = ord.customer_name || ord.student_id?.name || ord.student_name || 'Customer';
                   const rollNo = ord.student_id?.roll_no || ord.student?.roll_no || '';
                   const isTokenOnly = ord.payment_status === 'token_only';
                   const isParcel = Boolean(ord.is_parcel || ord.order_type === 'parcel');
-                  const timerData = parcelTimers[ordId] || parcelTimers[ordIdStr];
-                  const isTimerActive = Boolean(timerData && timerData.readyAt && timerData.readyAt > now);
-                  const isOrderReady = ord.order_status === 'ready' || (isParcel && timerData && timerData.readyAt && timerData.readyAt <= now);
+                  const isOutForDelivery = ord.order_status === 'out_for_delivery';
 
                   return (
                     <div
                       key={ordId}
+                      onClick={() => setSelectedTokenDetailOrder(ord)}
                       className={`bg-white rounded-3xl border-2 ${
-                        isOrderReady
-                          ? 'border-emerald-400 ring-2 ring-emerald-100/70 shadow-emerald-50'
+                        isOutForDelivery
+                          ? 'border-blue-400 ring-2 ring-blue-100/70 shadow-blue-50'
                           : isParcel
                           ? 'border-orange-300 hover:border-orange-500 ring-2 ring-orange-100/70 shadow-orange-50'
-                          : 'border-slate-200/90 hover:border-emerald-500'
-                      } p-5 shadow-sm flex flex-col justify-between space-y-4 transition-all duration-150 hover:shadow-md relative`}
+                          : 'border-slate-200/90 hover:border-emerald-500 hover:ring-2 hover:ring-emerald-100/70 shadow-emerald-50/50'
+                      } p-5 shadow-sm flex flex-col justify-between space-y-4 transition-all duration-150 hover:shadow-md relative cursor-pointer group`}
                     >
                       {/* Card Top: Big Token & Badges */}
                       <div>
                         <div className="flex items-start justify-between gap-3 mb-3">
-                          <div className={`px-3 py-2 rounded-2xl ${isOrderReady ? 'bg-emerald-600' : 'bg-amber-500'} text-white font-black text-lg sm:text-xl flex items-center justify-center tracking-tight shadow-md shrink-0 whitespace-nowrap min-w-[4.2rem]`}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTokenDetailOrder(ord);
+                            }}
+                            className={`px-3 py-2 rounded-2xl ${
+                              isOutForDelivery
+                                ? 'bg-blue-600 hover:bg-blue-700'
+                                : isParcel
+                                ? 'bg-amber-500 hover:bg-amber-600'
+                                : 'bg-emerald-600 hover:bg-emerald-700'
+                            } text-white font-black text-lg sm:text-xl flex items-center justify-center tracking-tight shadow-md shrink-0 whitespace-nowrap min-w-[4.2rem] cursor-pointer transition-transform hover:scale-105 active:scale-95`}
+                            title="Click to view full token and order details"
+                          >
                             {ord.token_number || 'T-00'}
-                          </div>
+                          </button>
 
                           <div className="text-right space-y-1.5">
                             <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                              {isOrderReady ? (
-                                <span className="inline-flex items-center gap-1 text-xs font-black uppercase px-2.5 py-1 rounded-xl bg-emerald-600 text-white shadow-xs tracking-wide animate-pulse">
-                                  ✓ READY
+                              {isOutForDelivery ? (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase px-2.5 py-1 rounded-xl bg-blue-600 text-white shadow-xs tracking-wide">
+                                  <Truck className="w-3.5 h-3.5" /> OUT FOR DELIVERY
                                 </span>
                               ) : isParcel ? (
                                 <span className="inline-flex items-center gap-1 text-xs font-black uppercase px-2.5 py-1 rounded-xl bg-orange-500 text-white shadow-xs tracking-wide">
@@ -1159,7 +1177,14 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
                         {/* Student & Time Info */}
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-extrabold text-base text-slate-900 truncate" title={studentName}>
+                            <h4
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTokenDetailOrder(ord);
+                              }}
+                              className="font-extrabold text-base text-slate-900 truncate hover:text-brand-orange cursor-pointer transition-colors"
+                              title={studentName}
+                            >
                               {studentName}
                             </h4>
                             {isWalkIn && (
@@ -1186,11 +1211,70 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
                           </p>
                         </div>
 
+                        {/* Parcel Delivery Address Box OR Dine In Details Box */}
+                        {isParcel ? (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTokenDetailOrder(ord);
+                            }}
+                            className="mt-3 p-2.5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs hover:bg-amber-100 transition-colors cursor-pointer group shadow-2xs"
+                            title="Click to view full order details"
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <div className="flex items-center gap-1.5 font-black text-[10px] text-amber-900 uppercase tracking-wider">
+                                <MapPin className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                                <span>Delivery Address</span>
+                              </div>
+                              <span className="text-[10px] text-amber-700 font-bold opacity-80 group-hover:opacity-100 transition-opacity">
+                                Details ↗
+                              </span>
+                            </div>
+                            <p className="line-clamp-2 text-slate-800 font-semibold text-xs leading-snug">
+                              {ord.delivery_address || 'Takeaway parcel at counter'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTokenDetailOrder(ord);
+                            }}
+                            className="mt-3 p-2.5 rounded-2xl bg-emerald-50/90 border border-emerald-200/90 text-emerald-950 text-xs hover:bg-emerald-100/90 transition-colors cursor-pointer group shadow-2xs"
+                            title="Click to view full token and order details"
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-0.5">
+                              <div className="flex items-center gap-1.5 font-black text-[10px] text-emerald-900 uppercase tracking-wider">
+                                <UtensilsCrossed className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>Dine In • Counter Pickup</span>
+                              </div>
+                              <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100 transition-opacity">
+                                Details ↗
+                              </span>
+                            </div>
+                            <p className="text-slate-700 font-semibold text-xs leading-snug">
+                              Eat in mess hall • Click to view items & token details
+                            </p>
+                          </div>
+                        )}
+
                         {/* Items List Pills */}
-                        <div className="mt-3.5 pt-3 border-t border-slate-100 space-y-1.5">
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                            Ordered Items:
-                          </span>
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTokenDetailOrder(ord);
+                          }}
+                          className="mt-3.5 pt-3 border-t border-slate-100 space-y-1.5 cursor-pointer group"
+                          title="Click to view full order details"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                              Ordered Items:
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400 group-hover:text-brand-orange transition-colors">
+                              View Details ↗
+                            </span>
+                          </div>
                           <div className="flex flex-wrap gap-1.5">
                             {(ord.items || []).map((it, idx) => (
                               <span
@@ -1210,120 +1294,41 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
                         </div>
                       </div>
 
-                      {/* Card Actions: Parcel (Ready, Timer, Delivered) vs Dine-In (Delivered only, Print hidden) */}
+                      {/* Card Actions: Parcel (Out For Delivery / Delivered) vs Dine-In (Delivered only) */}
                       <div className="pt-3 border-t border-slate-100">
                         {isParcel ? (
                           <div className="space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              {/* 1. READY BUTTON */}
-                              {isOrderReady ? (
-                                <div className="py-2.5 px-3 bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-xs rounded-xl flex items-center justify-center gap-1 shadow-2xs">
-                                  <Check className="w-3.5 h-3.5 stroke-[3] text-emerald-600" />
-                                  <span>READY ✓</span>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleMarkReady(ordId)}
-                                  className="py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-95 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                                >
-                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                  <span>READY</span>
-                                </button>
-                              )}
-
-                              {/* 2. TIMER OPTION */}
-                              <div className="relative">
-                                {isTimerActive ? (
-                                  <div className="w-full py-2 px-2 bg-amber-100 border border-amber-300 text-amber-950 font-mono font-black text-xs rounded-xl flex items-center justify-between shadow-2xs">
-                                    <span className="flex items-center gap-1 min-w-0 truncate">
-                                      <Clock className="w-3 h-3 text-brand-orange animate-spin shrink-0" style={{ animationDuration: '4s' }} />
-                                      <span>{formatTimeRemaining(ordId)}</span>
-                                    </span>
-                                    <button
-                                      onClick={() => clearParcelTimer(ordId)}
-                                      title="Cancel timer"
-                                      className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer shrink-0"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ) : isOrderReady ? (
-                                  <div className="w-full py-2.5 px-2 bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1">
-                                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>Ready</span>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <button
-                                      onClick={() => setActiveTimerDropdownId(activeTimerDropdownId === ordIdStr ? null : ordIdStr)}
-                                      disabled={isOrderReady}
-                                      className="w-full py-2.5 px-2 bg-slate-100 hover:bg-amber-50 hover:border-amber-300 text-slate-700 hover:text-amber-900 border border-slate-200 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                      title="Set Preparation Timer"
-                                    >
-                                      <Timer className="w-3.5 h-3.5 text-brand-orange" />
-                                      <span>Timer</span>
-                                    </button>
-
-                                    {activeTimerDropdownId === ordIdStr && (
-                                      <div className="absolute bottom-full left-0 right-0 mb-2 p-2.5 bg-white rounded-2xl shadow-xl border border-amber-200 z-30 space-y-2 animate-in fade-in zoom-in-95">
-                                        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                                          <span className="text-[10px] font-black uppercase text-slate-600">Set Timer</span>
-                                          <button
-                                            onClick={() => setActiveTimerDropdownId(null)}
-                                            className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                        <div className="grid grid-cols-4 gap-1">
-                                          {[5, 10, 15, 20].map((m) => (
-                                            <button
-                                              key={m}
-                                              onClick={() => handleSetParcelTimer(ord, m)}
-                                              className="py-1 text-[11px] font-extrabold bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-lg border border-amber-200 transition-colors cursor-pointer text-center"
-                                            >
-                                              {m}m
-                                            </button>
-                                          ))}
-                                        </div>
-                                        <div className="flex items-center gap-1 pt-1">
-                                          <input
-                                            type="number"
-                                            min="1"
-                                            max="120"
-                                            placeholder="Mins"
-                                            value={customMinutes}
-                                            onChange={(e) => setCustomMinutes(e.target.value)}
-                                            className="w-16 px-2 py-1 text-xs border border-slate-200 rounded-lg outline-none font-bold"
-                                          />
-                                          <button
-                                            onClick={() => handleSetParcelTimer(ord, customMinutes)}
-                                            disabled={!customMinutes}
-                                            className="flex-1 py-1.5 px-3 text-xs font-black bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-xs transition-colors text-center"
-                                          >
-                                            Start
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* 3. DELIVERED BUTTON FOR PARCEL */}
-                            <button
-                              onClick={() => handleMarkDelivered(ord._id || ord.id)}
-                              className="w-full py-3 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 active:scale-95 text-white font-black text-xs rounded-2xl shadow-md shadow-orange-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                            >
-                              <Check className="w-4 h-4 stroke-[3]" />
-                              <span>DELIVERED</span>
-                            </button>
+                            {!isOutForDelivery ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMarkOutForDelivery(ordId);
+                                }}
+                                className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-95 text-white font-black text-xs rounded-2xl shadow-md shadow-orange-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <Truck className="w-4 h-4" />
+                                <span>OUT FOR DELIVERY</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMarkDelivered(ordId);
+                                }}
+                                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-white font-black text-xs rounded-2xl shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <Check className="w-4 h-4 stroke-[3]" />
+                                <span>MARK DELIVERED</span>
+                              </button>
+                            )}
                           </div>
                         ) : (
-                          /* DINE IN: ONLY DELIVERED BUTTON (Print is hidden) */
+                          /* DINE IN: ONLY DELIVERED BUTTON */
                           <button
-                            onClick={() => handleMarkDelivered(ord._id || ord.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkDelivered(ordId);
+                            }}
                             className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-white font-black text-xs rounded-2xl shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                           >
                             <Check className="w-4 h-4 stroke-[3]" />
@@ -1340,32 +1345,54 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
               <div className="divide-y divide-slate-100">
                 {filteredTokenList.map((ord) => {
                   const ordId = ord._id || ord.id;
-                  const ordIdStr = String(ordId);
                   const isWalkIn = Boolean(ord.customer_name);
                   const studentName = ord.customer_name || ord.student_id?.name || ord.student_name || 'Customer';
                   const rollNo = ord.student_id?.roll_no || ord.student?.roll_no || '';
                   const isTokenOnly = ord.payment_status === 'token_only';
                   const isParcel = Boolean(ord.is_parcel || ord.order_type === 'parcel');
-                  const timerData = parcelTimers[ordId] || parcelTimers[ordIdStr];
-                  const isTimerActive = Boolean(timerData && timerData.readyAt && timerData.readyAt > now);
-                  const isOrderReady = ord.order_status === 'ready' || (isParcel && timerData && timerData.readyAt && timerData.readyAt <= now);
+                  const isOutForDelivery = ord.order_status === 'out_for_delivery';
 
                   return (
                     <div
                       key={ordId}
-                      className={`p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
-                        isOrderReady ? 'bg-emerald-50/50 hover:bg-emerald-50/80' : 'hover:bg-slate-50/80'
+                      onClick={() => setSelectedTokenDetailOrder(ord)}
+                      className={`p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors cursor-pointer ${
+                        isOutForDelivery
+                          ? 'bg-blue-50/40 hover:bg-blue-50/70'
+                          : isParcel
+                          ? 'hover:bg-amber-50/40'
+                          : 'hover:bg-emerald-50/40'
                       }`}
                     >
                       {/* Left: Token Number & Student Info */}
                       <div className="flex items-center gap-4 sm:gap-6 min-w-0 flex-1">
-                        <div className={`px-3.5 py-2 rounded-2xl ${isOrderReady ? 'bg-emerald-600' : 'bg-amber-500'} text-white font-black text-base sm:text-lg flex items-center justify-center tracking-tight shadow-md shrink-0 whitespace-nowrap min-w-[4.2rem]`}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTokenDetailOrder(ord);
+                          }}
+                          className={`px-3.5 py-2 rounded-2xl ${
+                            isOutForDelivery
+                              ? 'bg-blue-600 hover:bg-blue-700'
+                              : isParcel
+                              ? 'bg-amber-500 hover:bg-amber-600'
+                              : 'bg-emerald-600 hover:bg-emerald-700'
+                          } text-white font-black text-base sm:text-lg flex items-center justify-center tracking-tight shadow-md shrink-0 whitespace-nowrap min-w-[4.2rem] cursor-pointer transition-transform hover:scale-105 active:scale-95`}
+                          title="Click to view full token and order details"
+                        >
                           {ord.token_number || 'T-00'}
-                        </div>
+                        </button>
 
                         <div className="space-y-1.5 min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-extrabold text-base sm:text-lg text-slate-900 truncate">
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTokenDetailOrder(ord);
+                              }}
+                              className="font-extrabold text-base sm:text-lg text-slate-900 truncate hover:text-brand-orange cursor-pointer transition-colors"
+                            >
                               {studentName}
                             </span>
                             {isWalkIn && (
@@ -1378,9 +1405,9 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
                                 {rollNo}
                               </span>
                             )}
-                            {isOrderReady ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2.5 py-1 rounded-xl bg-emerald-600 text-white shadow-xs tracking-wide animate-pulse">
-                                ✓ READY
+                            {isOutForDelivery ? (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 py-1 rounded-xl bg-blue-600 text-white shadow-xs tracking-wide">
+                                <Truck className="w-3 h-3" /> OUT FOR DELIVERY
                               </span>
                             ) : isParcel ? (
                               <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2.5 py-1 rounded-xl bg-orange-500 text-white shadow-xs tracking-wide">
@@ -1403,8 +1430,44 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
                             </span>
                           </div>
 
+                          {/* Parcel Delivery Address row OR Dine In Box in List View */}
+                          {isParcel ? (
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTokenDetailOrder(ord);
+                              }}
+                              className="flex items-center gap-1.5 text-xs text-amber-900 font-semibold bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200 cursor-pointer hover:bg-amber-100 transition-colors w-fit max-w-full"
+                              title="Click to view full order details"
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                              <span className="truncate max-w-xs sm:max-w-md">{ord.delivery_address || 'Takeaway parcel at counter'}</span>
+                              <span className="text-[10px] text-amber-700 font-bold ml-1 shrink-0">Details ↗</span>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTokenDetailOrder(ord);
+                              }}
+                              className="flex items-center gap-1.5 text-xs text-emerald-900 font-semibold bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors w-fit max-w-full"
+                              title="Click to view full token and order details"
+                            >
+                              <UtensilsCrossed className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Dine In • Counter Pickup</span>
+                              <span className="text-[10px] text-emerald-700 font-bold ml-1 shrink-0">Details ↗</span>
+                            </div>
+                          )}
+
                           {/* Items Summary Pills */}
-                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTokenDetailOrder(ord);
+                            }}
+                            className="flex flex-wrap gap-1.5 pt-0.5 cursor-pointer"
+                            title="Click to view full order details"
+                          >
                             {(ord.items || []).map((it, idx) => (
                               <span
                                 key={idx}
@@ -1428,116 +1491,41 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
                         </div>
                       </div>
 
-                      {/* Right Action: Parcel (Ready, Timer, Delivered) vs Dine-In (Delivered only, Print hidden) */}
+                      {/* Right Action: Parcel (Out For Delivery / Delivered) vs Dine-In (Delivered only) */}
                       <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center w-full sm:w-auto flex-wrap">
                         {isParcel ? (
                           <>
-                            {/* READY BUTTON */}
-                            {isOrderReady ? (
-                              <div className="px-4 py-3 bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-xs rounded-2xl flex items-center gap-1 shadow-2xs">
-                                <Check className="w-3.5 h-3.5 stroke-[3] text-emerald-600" />
-                                <span>READY ✓</span>
-                              </div>
+                            {!isOutForDelivery ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMarkOutForDelivery(ordId);
+                                }}
+                                className="flex-1 sm:flex-initial px-5 py-3.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-95 text-white font-black text-xs rounded-2xl shadow-md shadow-orange-200 transition-all flex items-center gap-2 min-w-[150px] justify-center cursor-pointer"
+                              >
+                                <Truck className="w-4 h-4" />
+                                <span>OUT FOR DELIVERY</span>
+                              </button>
                             ) : (
                               <button
-                                onClick={() => handleMarkReady(ordId)}
-                                className="flex-1 sm:flex-initial px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs rounded-2xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMarkDelivered(ordId);
+                                }}
+                                className="flex-1 sm:flex-initial px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-white font-black text-xs rounded-2xl shadow-md shadow-emerald-200 transition-all flex items-center gap-2 min-w-[150px] justify-center cursor-pointer"
                               >
-                                <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                <span>READY</span>
+                                <Check className="w-4 h-4 stroke-[3]" />
+                                <span>MARK DELIVERED</span>
                               </button>
                             )}
-
-                            {/* TIMER OPTION */}
-                            <div className="relative">
-                              {isTimerActive ? (
-                                <div className="py-2.5 px-3 bg-amber-100 border border-amber-300 text-amber-950 font-mono font-black text-xs rounded-2xl flex items-center gap-2 shadow-2xs">
-                                  <Clock className="w-3.5 h-3.5 text-brand-orange animate-spin" style={{ animationDuration: '4s' }} />
-                                  <span>{formatTimeRemaining(ordId)}</span>
-                                  <button
-                                    onClick={() => clearParcelTimer(ordId)}
-                                    title="Cancel timer"
-                                    className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ) : isOrderReady ? (
-                                <div className="px-3.5 py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs rounded-2xl flex items-center gap-1">
-                                  <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                                  <span>Ready</span>
-                                </div>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => setActiveTimerDropdownId(activeTimerDropdownId === ordIdStr ? null : ordIdStr)}
-                                    disabled={isOrderReady}
-                                    className="px-3.5 py-3 bg-slate-100 hover:bg-amber-50 hover:border-amber-300 text-slate-700 hover:text-amber-900 border border-slate-200 font-bold text-xs rounded-2xl transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Set Preparation Timer"
-                                  >
-                                    <Timer className="w-3.5 h-3.5 text-brand-orange" />
-                                    <span>Timer</span>
-                                  </button>
-
-                                  {activeTimerDropdownId === ordIdStr && (
-                                    <div className="absolute bottom-full right-0 mb-2 p-2.5 bg-white rounded-2xl shadow-xl border border-amber-200 z-30 space-y-2 w-48 animate-in fade-in zoom-in-95">
-                                      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                                        <span className="text-[10px] font-black uppercase text-slate-600">Set Timer</span>
-                                        <button
-                                          onClick={() => setActiveTimerDropdownId(null)}
-                                          className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
-                                        >
-                                          <X className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                      <div className="grid grid-cols-4 gap-1">
-                                        {[5, 10, 15, 20].map((m) => (
-                                          <button
-                                            key={m}
-                                            onClick={() => handleSetParcelTimer(ord, m)}
-                                            className="py-1 text-[11px] font-extrabold bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-lg border border-amber-200 transition-colors cursor-pointer text-center"
-                                          >
-                                            {m}m
-                                          </button>
-                                        ))}
-                                      </div>
-                                      <div className="flex items-center gap-1 pt-1">
-                                        <input
-                                          type="number"
-                                          min="1"
-                                          max="120"
-                                          placeholder="Mins"
-                                          value={customMinutes}
-                                          onChange={(e) => setCustomMinutes(e.target.value)}
-                                          className="w-16 px-2 py-1 text-xs border border-slate-200 rounded-lg outline-none font-bold"
-                                        />
-                                        <button
-                                          onClick={() => handleSetParcelTimer(ord, customMinutes)}
-                                          disabled={!customMinutes}
-                                          className="flex-1 py-1 px-2 text-xs font-black bg-orange-500 hover:bg-orange-600 text-white rounded-lg disabled:opacity-40 cursor-pointer"
-                                        >
-                                          Start
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </div>
-
-                            {/* DELIVERED BUTTON */}
-                            <button
-                              onClick={() => handleMarkDelivered(ord._id || ord.id)}
-                              className="flex-1 sm:flex-initial px-5 py-3.5 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 shadow-orange-200 active:scale-95 text-white font-black text-xs rounded-2xl shadow-md transition-all flex items-center gap-1.5 min-w-[120px] justify-center cursor-pointer"
-                            >
-                              <Check className="w-4 h-4 stroke-[3]" />
-                              <span>DELIVERED</span>
-                            </button>
                           </>
                         ) : (
-                          /* DINE IN: DELIVERED ONLY (Print is hidden) */
+                          /* DINE IN: DELIVERED ONLY */
                           <button
-                            onClick={() => handleMarkDelivered(ord._id || ord.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkDelivered(ordId);
+                            }}
                             className="flex-1 sm:flex-initial px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-200 active:scale-95 text-white font-black text-xs rounded-2xl shadow-md transition-all flex items-center gap-1.5 min-w-[130px] justify-center cursor-pointer"
                           >
                             <Check className="w-4 h-4 stroke-[3]" />
@@ -1571,6 +1559,359 @@ export default function KitchenScreen({ isStaffFullscreen = false }) {
         onOrderCreated={handleManualOrderCreated}
         printReceipt={printReceipt}
       />
+
+      {/* TOKEN DETAILS POPUP MODAL (MATCHING UPLOADED SPEC) */}
+      {selectedTokenDetailOrder && (() => {
+        const ord = selectedTokenDetailOrder;
+        const ordId = ord._id || ord.id;
+        const studentName = ord.customer_name || ord.student_id?.name || ord.student_name || 'Customer';
+        const mobileNumber = getStudentPhone(ord);
+        const tokenDisplay = formatTokenDisplay(ord.token_number);
+        const parsedAddress = parseAddressLines(ord.delivery_address);
+        const isParcel = Boolean(ord.is_parcel || ord.order_type === 'parcel');
+        const isOutForDelivery = ord.order_status === 'out_for_delivery';
+        const isDelivered = ord.order_status === 'delivered';
+
+        const subtotal = Number(ord.subtotal_amount != null ? ord.subtotal_amount : ord.total_amount || 0);
+        const discountAmount = Number(ord.discount_amount || 0);
+        const discountPercentage = Number(ord.discount_percentage || 0);
+        const hasDiscount = discountAmount > 0;
+        const totalAmount = Number(ord.total_amount || 0);
+
+        const createdDate = ord.created_at ? new Date(ord.created_at) : new Date();
+        const dateStr = createdDate.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+        const timeStr = createdDate.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }).toLowerCase();
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+            onClick={() => setSelectedTokenDetailOrder(null)}
+          >
+            <div
+              className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="p-5 sm:p-6 pb-4 flex items-start gap-4 justify-between border-b border-slate-100">
+                <div className="flex items-start gap-3.5 min-w-0">
+                  {/* Big Token Badge */}
+                  <div
+                    className={`w-16 h-16 sm:w-20 sm:h-20 ${
+                      isOutForDelivery
+                        ? 'bg-blue-600'
+                        : isParcel
+                        ? 'bg-gradient-to-br from-amber-500 to-orange-500'
+                        : 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                    } text-white rounded-2xl flex flex-col items-center justify-center font-black shadow-md shrink-0 select-none p-1 text-center`}
+                  >
+                    <span className="text-xs sm:text-sm font-bold tracking-wider opacity-90 leading-tight">
+                      {tokenDisplay.prefix}
+                    </span>
+                    <span className="text-xl sm:text-2xl font-black tracking-wider leading-none mt-0.5">
+                      {tokenDisplay.number}
+                    </span>
+                  </div>
+
+                  {/* Title, Badges, and Creation Time */}
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                        Token Details
+                      </h3>
+                      <span className="bg-slate-100 text-slate-700 text-[11px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider">
+                        {ord.meal_type}
+                      </span>
+                      {isOutForDelivery ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-200 text-[11px] font-black uppercase tracking-wider">
+                          <Truck className="w-3.5 h-3.5 text-blue-500" />
+                          <span>OUT FOR DELIVERY</span>
+                        </span>
+                      ) : isDelivered ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black uppercase tracking-wider">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>DELIVERED</span>
+                        </span>
+                      ) : isParcel ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-black uppercase tracking-wider">
+                          <span>📦 PARCEL</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-black uppercase tracking-wider">
+                          <span>🍽️ DINE IN</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 font-semibold">
+                      Created: {dateStr}, {timeStr}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Close 'X' Button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedTokenDetailOrder(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+                {/* Student Name & Mobile Number 2-Card Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Student Name Card */}
+                  <div className="bg-stone-50/80 border border-stone-200/80 rounded-2xl p-3.5 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                      <User className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        STUDENT NAME
+                      </span>
+                      <span className="block font-black text-sm sm:text-base text-slate-900 truncate" title={studentName}>
+                        {studentName}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Mobile Number Card */}
+                  <div className="bg-stone-50/80 border border-stone-200/80 rounded-2xl p-3.5 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Phone className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        MOBILE NUMBER
+                      </span>
+                      <span className="block font-black text-sm sm:text-base text-slate-900 truncate">
+                        {mobileNumber}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dining Option Details: Full Delivery Address Card (for Parcel) OR Dine In Service Card */}
+                {isParcel ? (
+                  <div className="border border-amber-300/80 bg-amber-50/40 rounded-2xl p-4 space-y-2 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-xs uppercase tracking-wider">
+                      <MapPin className="w-4 h-4 text-orange-600 shrink-0" />
+                      <span>FULL DELIVERY ADDRESS</span>
+                    </div>
+                    {parsedAddress ? (
+                      <div className="space-y-0.5">
+                        <p className="font-extrabold text-base text-slate-900 leading-tight">
+                          {parsedAddress.primary}
+                        </p>
+                        {parsedAddress.secondary && (
+                          <p className="text-xs font-semibold text-slate-600">
+                            {parsedAddress.secondary}
+                          </p>
+                        )}
+                        {parsedAddress.meta && (
+                          <p className="text-[11px] font-medium text-slate-500 pt-0.5">
+                            {parsedAddress.meta}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs font-semibold text-slate-700">
+                        {ord.delivery_address || 'Takeaway parcel at counter'}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="border border-emerald-300/80 bg-emerald-50/50 rounded-2xl p-4 space-y-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-emerald-900 font-extrabold text-xs uppercase tracking-wider">
+                        <UtensilsCrossed className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>DINING OPTION: DINE IN</span>
+                      </div>
+                      <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Mess Counter Pickup
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-extrabold text-base text-slate-900 leading-tight">
+                        Mess Hall Dining & Counter Collection
+                      </p>
+                      <p className="text-xs font-semibold text-slate-600">
+                        The student will dine in the mess hall and collect the meal tray directly at the service counter.
+                      </p>
+                      <div className="flex items-center gap-3 pt-1 text-xs font-bold text-slate-500 flex-wrap">
+                        <span>
+                          Payment:{' '}
+                          <strong className="text-slate-800">
+                            {ord.payment_status === 'token_only'
+                              ? 'Meal Plan Token'
+                              : isWalkIn
+                              ? `Walk-in (${ord.payment_method || 'Cash'})`
+                              : ord.payment_method || 'Online / Razorpay'}
+                          </strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Service:{' '}
+                          <strong className="text-emerald-700">Dine In (Eat in Mess)</strong>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ordered Items Section */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                      <UtensilsCrossed className="w-4 h-4 text-orange-600" />
+                      <span>Ordered Items</span>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-400">
+                      {ord.items?.length || 0} item{(ord.items?.length || 0) === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  {/* Items Table */}
+                  <div className="rounded-2xl border border-slate-100 overflow-hidden">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                          <th className="py-2.5 px-3.5">Item</th>
+                          <th className="py-2.5 px-3.5 text-center">Qty</th>
+                          <th className="py-2.5 px-3.5 text-right">Price</th>
+                          <th className="py-2.5 px-3.5 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(ord.items || []).map((it, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="py-3 px-3.5 font-bold text-slate-900">
+                              {it.item_name || it.name}
+                              {it.variant_name && !(it.item_name || it.name || '').includes(it.variant_name) && (
+                                <span className="ml-1.5 text-amber-800 font-bold text-[10px] bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                  {it.variant_name}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3.5 text-center font-bold text-slate-700">
+                              {it.quantity}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-semibold text-slate-600">
+                              ₹{Number(it.price || 0)}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-black text-slate-900">
+                              ₹{Number(it.price || 0) * Number(it.quantity || 1)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Subtotal, Discount & Total Amount Block */}
+                  <div className="bg-stone-50/70 p-3.5 rounded-2xl border border-stone-200/60 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                      <span>Subtotal Amount</span>
+                      <span className="font-bold text-slate-800">
+                        ₹{subtotal}
+                      </span>
+                    </div>
+
+                    {hasDiscount && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-lg font-bold">
+                          Discount ({discountPercentage}%)
+                        </span>
+                        <span className="font-black text-emerald-600">
+                          -₹{discountAmount}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                      <span className="font-black text-sm sm:text-base text-slate-900">
+                        Total Amount
+                      </span>
+                      <span className="font-black text-lg sm:text-xl text-orange-600">
+                        ₹{totalAmount}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between gap-3 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTokenDetailOrder(null)}
+                  className="px-6 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-extrabold text-xs hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+
+                {isDelivered ? (
+                  <div className="px-6 py-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 font-black text-xs flex items-center gap-1.5">
+                    <Check className="w-4 h-4 stroke-[3] text-emerald-600" />
+                    <span>Delivered</span>
+                  </div>
+                ) : isOutForDelivery ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleMarkDelivered(ordId);
+                      setSelectedTokenDetailOrder(null);
+                    }}
+                    className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-md shadow-emerald-200 transition-all cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>Mark Delivered</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (isParcel) {
+                        await handleMarkOutForDelivery(ordId);
+                      } else {
+                        await handleMarkDelivered(ordId);
+                        setSelectedTokenDetailOrder(null);
+                      }
+                    }}
+                    className={`px-6 py-2.5 rounded-xl ${
+                      isParcel
+                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-orange-200'
+                        : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+                    } active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer`}
+                  >
+                    {isParcel ? (
+                      <>
+                        <Truck className="w-4 h-4" />
+                        <span>Out For Delivery</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 stroke-[3]" />
+                        <span>Mark Delivered</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

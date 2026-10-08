@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, ShieldCheck, AlertCircle, Utensils, Info, Sparkles } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, ShieldCheck, AlertCircle, Utensils, Info, Sparkles, MapPin, Phone, Check } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -28,6 +28,172 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const lastFailureDataRef = useRef(null);
+
+  // Parcel Delivery Address State & Management
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const [showAddAddressForm, setShowAddAddressForm] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [addressActionError, setAddressActionError] = useState('');
+
+  // Add Address Form State
+  const [newLabel, setNewLabel] = useState('Hostel');
+  const [newAddressLine, setNewAddressLine] = useState('');
+  const [newRoomOrFlat, setNewRoomOrFlat] = useState('');
+  const [newPhone, setNewPhone] = useState(student?.phone || '');
+
+  useEffect(() => {
+    if (student?.phone && !newPhone) {
+      setNewPhone(student.phone);
+    }
+  }, [student?.phone]);
+
+  // Load addresses when parcel option is enabled
+  useEffect(() => {
+    if (!isParcel) return;
+
+    let isMounted = true;
+    const loadAddresses = async () => {
+      setLoadingAddresses(true);
+      try {
+        if (isAuthenticated) {
+          const res = await api.get('/auth/student/addresses');
+          if (isMounted && res.data?.success && Array.isArray(res.data.addresses)) {
+            setAddresses(res.data.addresses);
+            try {
+              localStorage.setItem('mess_student_addresses', JSON.stringify(res.data.addresses));
+            } catch (e) {}
+
+            if (res.data.addresses.length > 0) {
+              const def = res.data.addresses.find((a) => a.is_default) || res.data.addresses[0];
+              setSelectedAddressId((prev) => prev || def.id);
+            }
+          }
+        } else {
+          const cached = localStorage.getItem('mess_student_addresses');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAddresses(parsed);
+              const def = parsed.find((a) => a.is_default) || parsed[0];
+              setSelectedAddressId((prev) => prev || def.id);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load student addresses, reading cache:', err.message);
+        const cached = localStorage.getItem('mess_student_addresses');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAddresses(parsed);
+              const def = parsed.find((a) => a.is_default) || parsed[0];
+              setSelectedAddressId((prev) => prev || def.id);
+            }
+          } catch (e) {}
+        }
+      } finally {
+        if (isMounted) setLoadingAddresses(false);
+      }
+    };
+
+    loadAddresses();
+    return () => {
+      isMounted = false;
+    };
+  }, [isParcel, isAuthenticated]);
+
+  const selectedAddressObj = addresses.find((a) => a.id === selectedAddressId);
+  const selectedAddressText = selectedAddressObj
+    ? [
+        selectedAddressObj.label ? `[${selectedAddressObj.label}]` : null,
+        selectedAddressObj.room_or_flat ? `Room/Flat: ${selectedAddressObj.room_or_flat}` : null,
+        selectedAddressObj.address_line,
+        selectedAddressObj.phone ? `Ph: ${selectedAddressObj.phone}` : null,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : '';
+
+  const handleSaveAddress = async (e) => {
+    e?.preventDefault();
+    setAddressActionError('');
+
+    if (!newAddressLine.trim()) {
+      setAddressActionError('Please enter delivery address details.');
+      return;
+    }
+
+    setIsSavingAddress(true);
+    try {
+      if (isAuthenticated) {
+        const res = await api.post('/auth/student/addresses', {
+          label: newLabel.trim() || 'Hostel',
+          address_line: newAddressLine.trim(),
+          room_or_flat: newRoomOrFlat.trim() || null,
+          phone: newPhone.trim() || null,
+          is_default: addresses.length === 0,
+        });
+
+        if (res.data?.success && res.data.address) {
+          const created = res.data.address;
+          const updated = [created, ...addresses];
+          setAddresses(updated);
+          setSelectedAddressId(created.id);
+          try {
+            localStorage.setItem('mess_student_addresses', JSON.stringify(updated));
+          } catch (e) {}
+          setShowAddAddressForm(false);
+          setNewAddressLine('');
+          setNewRoomOrFlat('');
+        }
+      } else {
+        const localAddr = {
+          id: `local_${Date.now()}`,
+          label: newLabel.trim() || 'Hostel',
+          address_line: newAddressLine.trim(),
+          room_or_flat: newRoomOrFlat.trim() || null,
+          phone: newPhone.trim() || null,
+          is_default: addresses.length === 0,
+        };
+        const updated = [localAddr, ...addresses];
+        setAddresses(updated);
+        setSelectedAddressId(localAddr.id);
+        try {
+          localStorage.setItem('mess_student_addresses', JSON.stringify(updated));
+        } catch (e) {}
+        setShowAddAddressForm(false);
+        setNewAddressLine('');
+        setNewRoomOrFlat('');
+      }
+    } catch (err) {
+      console.error('Error saving address:', err);
+      setAddressActionError(err.response?.data?.message || 'Failed to save address. Please try again.');
+    } finally {
+      setIsSavingAddress(false);
+    }
+  };
+
+  const handleDeleteAddress = async (addrId, e) => {
+    e?.stopPropagation();
+    try {
+      if (isAuthenticated && !String(addrId).startsWith('local_')) {
+        await api.delete(`/auth/student/addresses/${addrId}`);
+      }
+      const updated = addresses.filter((a) => a.id !== addrId);
+      setAddresses(updated);
+      try {
+        localStorage.setItem('mess_student_addresses', JSON.stringify(updated));
+      } catch (e) {}
+      if (selectedAddressId === addrId) {
+        setSelectedAddressId(updated[0]?.id || null);
+      }
+    } catch (err) {
+      console.error('Error deleting address:', err);
+    }
+  };
 
   const discountInfo = contextDiscountInfo || {
     is_discount_active: false,
@@ -70,6 +236,14 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
 
     if (cartItems.length === 0) return;
 
+    // STRICT VALIDATION: If parcel is selected, delivery address is strictly required
+    if (isParcel) {
+      if (!selectedAddressId || !selectedAddressText || !selectedAddressText.trim()) {
+        setErrorMessage('Delivery address is required for parcel orders. Please select or add an address above before proceeding.');
+        return;
+      }
+    }
+
     setCheckoutLoading(true);
 
     try {
@@ -89,6 +263,8 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
         itemsCount: cartItems.length,
         meal_type: selectedMealType || cartItems[0]?.meal_type || 'lunch',
         cartTotal,
+        isParcel,
+        delivery_address: isParcel ? selectedAddressText : null,
       });
 
       const res = await api.post('/orders/create-razorpay-order', {
@@ -96,6 +272,7 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
         meal_type: selectedMealType || cartItems[0]?.meal_type || 'lunch',
         order_type: isParcel ? 'parcel' : 'dine_in',
         is_parcel: isParcel,
+        delivery_address: isParcel ? selectedAddressText : null,
       });
 
       console.log('[Razorpay Diagnostics] 3. Backend order creation response received:', res.data);
@@ -104,6 +281,22 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
 
       if (!razorpay_order_id) {
         throw new Error('Backend response did not contain a valid Razorpay Order ID.');
+      }
+
+      // Persist pending checkout in sessionStorage for mobile UPI redirect / reload resilience
+      try {
+        sessionStorage.setItem(
+          'pending_mealbook_checkout',
+          JSON.stringify({
+            razorpay_order_id,
+            order_db_id,
+            itemsCount: cartItems.length,
+            delivery_address: isParcel ? selectedAddressText : null,
+            timestamp: Date.now(),
+          })
+        );
+      } catch (e) {
+        // Ignore storage errors
       }
 
       // Dynamically use backend key_id (from .env), falling back to discountInfo or frontend env
@@ -131,69 +324,90 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
               razorpay_order_id: response.razorpay_order_id || razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id || `pay_mock_${Date.now()}`,
               razorpay_signature: response.razorpay_signature || 'mock_signature',
+              order_db_id: order_db_id,
               items: cartItems,
               meal_type: selectedMealType || cartItems[0]?.meal_type || 'lunch',
               order_type: isParcel ? 'parcel' : 'dine_in',
               is_parcel: isParcel,
+              delivery_address: isParcel ? selectedAddressText : null,
             });
 
             console.log('[Razorpay Diagnostics] Payment verification response:', verifyRes.data);
 
             if (verifyRes.data.success) {
+              sessionStorage.removeItem('pending_mealbook_checkout');
               clearCart(); // Clear cart ONLY on successful checkout
               setIsCartOpen(false);
               setTimeout(() => {
                 onOrderSuccess(verifyRes.data.token_number, verifyRes.data.order);
               }, 250);
-            } else {
-              const failReason = verifyRes.data.message || 'Payment verification failed.';
-              setErrorMessage(failReason);
-              const failurePayload = {
-                reason: failReason,
-                orderId: response.razorpay_order_id || razorpay_order_id,
-                paymentId: response.razorpay_payment_id,
-                amount: finalPayable,
-                mealType: selectedMealType,
-                studentName: student?.name,
-                studentRollNo: student?.roll_no,
-              };
-              lastFailureDataRef.current = failurePayload;
-              if (onPaymentFailure) {
-                onPaymentFailure(failurePayload);
-              }
+              return;
             }
           } catch (verifyErr) {
-            console.error('[Razorpay Diagnostics] Payment verification error:', verifyErr);
-            const failReason = verifyErr.response?.data?.message || 'Payment verification failed. Please check your order status.';
-            setErrorMessage(failReason);
-            const failurePayload = {
-              reason: failReason,
-              orderId: response?.razorpay_order_id || razorpay_order_id,
-              paymentId: response?.razorpay_payment_id,
-              amount: finalPayable,
-              mealType: selectedMealType,
-              studentName: student?.name,
-              studentRollNo: student?.roll_no,
-            };
-            lastFailureDataRef.current = failurePayload;
-            if (onPaymentFailure) {
-              onPaymentFailure(failurePayload);
-            }
-          } finally {
-            setCheckoutLoading(false);
+            console.warn('[Razorpay Diagnostics] Direct verification call encountered error, checking payment status fallback...', verifyErr);
           }
+
+          // Fallback auto-check: Check order status with backend (queries Razorpay API directly)
+          try {
+            const statusRes = await api.get(`/orders/check-payment-status/${response.razorpay_order_id || razorpay_order_id}`);
+            if (statusRes.data?.is_paid && statusRes.data?.token_number) {
+              console.log('[Razorpay Diagnostics] Payment confirmed via status check fallback!');
+              sessionStorage.removeItem('pending_mealbook_checkout');
+              clearCart();
+              setIsCartOpen(false);
+              setTimeout(() => {
+                onOrderSuccess(statusRes.data.token_number, statusRes.data.order);
+              }, 250);
+              return;
+            }
+          } catch (chkErr) {
+            console.error('[Razorpay Diagnostics] Status check fallback error:', chkErr);
+          }
+
+          // If both verification and fallback fail:
+          const failReason = 'Payment verification could not be completed immediately. Please check your order history.';
+          setErrorMessage(failReason);
+          const failurePayload = {
+            reason: failReason,
+            orderId: response.razorpay_order_id || razorpay_order_id,
+            paymentId: response.razorpay_payment_id,
+            amount: finalPayable,
+            mealType: selectedMealType,
+            studentName: student?.name,
+            studentRollNo: student?.roll_no,
+          };
+          lastFailureDataRef.current = failurePayload;
+          if (onPaymentFailure) {
+            onPaymentFailure(failurePayload);
+          }
+          setCheckoutLoading(false);
         },
         prefill: {
-          name: student?.name || 'Student',
-          email: student?.email || 'student@mess.com',
+          name: student?.name || 'User',
+          email: student?.email || 'user@mess.com',
         },
         theme: {
           color: '#ea580c',
         },
         modal: {
-          ondismiss: function () {
-            console.log('[Razorpay Diagnostics] Checkout modal dismissed by user.');
+          ondismiss: async function () {
+            console.log('[Razorpay Diagnostics] Checkout modal dismissed. Checking if payment was completed in UPI/banking app...');
             setCheckoutLoading(false);
+            try {
+              // Resilience for mobile UPI: User may have completed payment in PhonePe/GPay before switching back
+              const statusRes = await api.get(`/orders/check-payment-status/${razorpay_order_id}`);
+              if (statusRes.data?.is_paid && statusRes.data?.token_number) {
+                console.log('[Razorpay Diagnostics] Payment confirmed on modal dismiss check!');
+                sessionStorage.removeItem('pending_mealbook_checkout');
+                clearCart();
+                setIsCartOpen(false);
+                setTimeout(() => {
+                  onOrderSuccess(statusRes.data.token_number, statusRes.data.order);
+                }, 250);
+              }
+            } catch (e) {
+              // Ignore dismiss check network failure
+            }
           },
         },
       };
@@ -563,6 +777,229 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
               />
             </div>
 
+            {/* FEATURE: Parcel Delivery Address Selector & Management */}
+            {isParcel && (
+              <div className="p-3.5 bg-gradient-to-br from-amber-50/90 to-orange-50/60 border-2 border-amber-300 rounded-3xl space-y-3 shadow-xs animate-in fade-in duration-200">
+                <div className="flex items-center justify-between gap-2 border-b border-amber-200/80 pb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-xl bg-brand-orange/15 text-brand-orange flex items-center justify-center shrink-0">
+                      <MapPin className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black text-stone-900 tracking-tight flex items-center gap-1.5">
+                        <span>Delivery Address</span>
+                        <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                          Required
+                        </span>
+                      </h4>
+                      <p className="text-[10px] text-stone-500 font-medium truncate">
+                        {addresses.length > 0 ? 'Select or add your delivery location' : 'Add delivery location to proceed'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {!showAddAddressForm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddAddressForm(true);
+                        setAddressActionError('');
+                      }}
+                      className="px-2.5 py-1 bg-brand-orange hover:bg-orange-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-xs transition-colors cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Saved Addresses Radio List */}
+                {addresses.length > 0 && !showAddAddressForm && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-0.5">
+                    {addresses.map((addr) => {
+                      const isSelected = selectedAddressId === addr.id;
+                      return (
+                        <div
+                          key={addr.id}
+                          onClick={() => setSelectedAddressId(addr.id)}
+                          className={`p-2.5 rounded-2xl border-2 transition-all cursor-pointer flex items-start justify-between gap-2.5 ${
+                            isSelected
+                              ? 'bg-white border-brand-orange ring-2 ring-brand-orange/30 shadow-sm'
+                              : 'bg-white/70 border-amber-200/80 hover:bg-white hover:border-amber-300'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
+                            <div className={`w-4 h-4 rounded-full mt-0.5 border-2 flex items-center justify-center shrink-0 ${
+                              isSelected ? 'border-brand-orange bg-brand-orange' : 'border-stone-300'
+                            }`}>
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] font-black uppercase bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">
+                                  {addr.label || 'Address'}
+                                </span>
+                                {addr.room_or_flat && (
+                                  <span className="text-[10px] font-bold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded">
+                                    {addr.room_or_flat}
+                                  </span>
+                                )}
+                                {Boolean(addr.is_default) && (
+                                  <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded">
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs font-medium text-stone-800 break-words mt-1 leading-snug">
+                                {addr.address_line}
+                              </p>
+                              {addr.phone && (
+                                <p className="text-[10px] text-stone-500 font-medium mt-0.5 flex items-center gap-1">
+                                  <Phone className="w-2.5 h-2.5 text-stone-400" />
+                                  <span>{addr.phone}</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteAddress(addr.id, e)}
+                            title="Remove address"
+                            className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Empty State when no addresses exist */}
+                {addresses.length === 0 && !showAddAddressForm && (
+                  <div className="p-3 bg-white/80 rounded-2xl border border-dashed border-amber-300 text-center space-y-2">
+                    <p className="text-xs text-stone-600 font-medium">
+                      No saved addresses found. Please add a delivery address to proceed.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddAddressForm(true)}
+                      className="px-3.5 py-1.5 bg-brand-orange hover:bg-orange-600 text-white rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Address</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Add Address Form */}
+                {showAddAddressForm && (
+                  <form onSubmit={handleSaveAddress} className="p-3 bg-white rounded-2xl border border-amber-300 shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-stone-100">
+                      <span className="text-xs font-black text-stone-900 uppercase tracking-wide">
+                        Add Delivery Address
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddAddressForm(false);
+                          setAddressActionError('');
+                        }}
+                        className="text-stone-400 hover:text-stone-700 p-1 rounded-lg text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {addressActionError && (
+                      <p className="text-[11px] font-bold text-rose-600 bg-rose-50 p-2 rounded-xl border border-rose-200">
+                        {addressActionError}
+                      </p>
+                    )}
+
+                    {/* Label selection */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-extrabold uppercase text-stone-500">Address Label</label>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {['Hostel', 'Campus Block', 'Room', 'Home', 'Other'].map((lbl) => (
+                          <button
+                            key={lbl}
+                            type="button"
+                            onClick={() => setNewLabel(lbl)}
+                            className={`px-2.5 py-1 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${
+                              newLabel === lbl
+                                ? 'bg-brand-dark text-white border-brand-dark shadow-2xs'
+                                : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
+                            }`}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-extrabold uppercase text-stone-500">Room / Flat No.</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Room 204"
+                          value={newRoomOrFlat}
+                          onChange={(e) => setNewRoomOrFlat(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-stone-200 focus:outline-none focus:border-brand-orange"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-extrabold uppercase text-stone-500">Contact Phone</label>
+                        <input
+                          type="tel"
+                          placeholder="10-digit mobile"
+                          value={newPhone}
+                          onChange={(e) => setNewPhone(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-stone-200 focus:outline-none focus:border-brand-orange"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-extrabold uppercase text-stone-500">Address Details *</label>
+                      <textarea
+                        required
+                        rows={2}
+                        placeholder="Hostel name, building, floor or campus landmark..."
+                        value={newAddressLine}
+                        onChange={(e) => setNewAddressLine(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-stone-200 focus:outline-none focus:border-brand-orange resize-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={isSavingAddress}
+                        className="flex-1 py-2 bg-brand-orange hover:bg-orange-600 text-white rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                      >
+                        {isSavingAddress ? 'Saving...' : 'Save & Select Address'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddAddressForm(false);
+                          setAddressActionError('');
+                        }}
+                        className="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+
             {/* Meal Service Distribution Notice in Cart */}
             {currentMealWindow?.is_note_visible && (
               <div className="p-3 bg-amber-50/90 border border-amber-300 rounded-2xl flex items-start gap-2.5 text-amber-950 text-xs shadow-2xs animate-in fade-in">
@@ -580,15 +1017,28 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
               </div>
             )}
 
+            {/* Warning if Parcel is checked but no address selected */}
+            {isParcel && (!selectedAddressId || !selectedAddressText) && (
+              <div className="p-3 bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl flex items-center gap-2.5 text-amber-900 text-xs font-bold animate-pulse">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Please select or add a delivery address above to proceed with your parcel order.</span>
+              </div>
+            )}
+
             {/* Single Online Checkout Action */}
             <div className="space-y-2">
               <button
                 onClick={handleProceedToPay}
-                disabled={checkoutLoading}
-                className="w-full py-3.5 sm:py-4 bg-gradient-to-r from-brand-orange to-amber-600 hover:from-amber-600 hover:to-brand-orange text-white font-extrabold rounded-2xl text-sm shadow-warm hover:shadow-cardHover transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+                disabled={checkoutLoading || (isParcel && (!selectedAddressId || !selectedAddressText))}
+                className="w-full py-3.5 sm:py-4 bg-gradient-to-r from-brand-orange to-amber-600 hover:from-amber-600 hover:to-brand-orange text-white font-extrabold rounded-2xl text-sm shadow-warm hover:shadow-cardHover transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
               >
                 {checkoutLoading ? (
                   <span>Initiating Razorpay...</span>
+                ) : isParcel && (!selectedAddressId || !selectedAddressText) ? (
+                  <>
+                    <MapPin className="w-4 h-4 shrink-0 text-amber-200" />
+                    <span>Select Address to Pay (₹{finalPayable})</span>
+                  </>
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4 shrink-0" />
@@ -598,7 +1048,9 @@ export default function CartDrawer({ onOrderSuccess, onPaymentFailure }) {
                 )}
               </button>
               <p className="text-[10px] text-center text-stone-400 font-medium">
-                Pay online & get instant order token number
+                {isParcel && (!selectedAddressId || !selectedAddressText)
+                  ? 'Delivery address selection is mandatory for parcel orders'
+                  : 'Pay online & get instant order token number'}
               </p>
             </div>
           </div>

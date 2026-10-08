@@ -496,6 +496,54 @@ export default function App() {
     };
   }, [isAuthenticated, student, clearCart, syncActiveParcelOrders]);
 
+  // Mobile UPI Resilience: On app open or return from banking/UPI apps, verify any pending checkout
+  useEffect(() => {
+    if (!isAuthenticated || !student) return;
+
+    const checkPendingCheckout = async () => {
+      try {
+        const raw = sessionStorage.getItem('pending_mealbook_checkout');
+        if (!raw) return;
+        const pending = JSON.parse(raw);
+        if (!pending?.razorpay_order_id) return;
+
+        // If checkout is less than 30 minutes old, check status
+        const ageMs = Date.now() - (pending.timestamp || 0);
+        if (ageMs > 30 * 60 * 1000) {
+          sessionStorage.removeItem('pending_mealbook_checkout');
+          return;
+        }
+
+        const res = await api.get(`/orders/check-payment-status/${pending.razorpay_order_id}`);
+        if (res.data?.is_paid && res.data?.token_number) {
+          console.log('[App Auto-Recovery] Pending checkout was paid in external app! Restoring token modal:', res.data.token_number);
+          sessionStorage.removeItem('pending_mealbook_checkout');
+          clearCart();
+          setSuccessToken(res.data.token_number);
+          setSuccessOrder(res.data.order || { token_number: res.data.token_number, payment_status: 'paid' });
+        }
+      } catch (err) {
+        // Silently ignore recovery check error
+      }
+    };
+
+    checkPendingCheckout();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkPendingCheckout();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', checkPendingCheckout);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', checkPendingCheckout);
+    };
+  }, [isAuthenticated, student, clearCart]);
+
   // Check for reset_token in URL query parameters on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {

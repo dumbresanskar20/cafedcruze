@@ -311,6 +311,12 @@ export default function OrderDetailModal({ order, onClose }) {
             <span>Order Date:</span>
             <span className="text-stone-700 font-bold">{order.date}</span>
           </div>
+          {isParcel && order.delivery_address && (
+            <div className="flex items-start justify-between font-semibold text-stone-500 pb-1 border-b border-stone-200/60">
+              <span className="shrink-0">Delivery Address:</span>
+              <span className="text-stone-800 font-bold text-right ml-2 break-words">{order.delivery_address}</span>
+            </div>
+          )}
 
           <div className="space-y-1">
             {(order.items || []).map((it, idx) => (

@@ -518,7 +518,7 @@ export default function DiscountSettingsScreen() {
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed font-medium">
-              Automatically applies to newly registered students across any meal category for their initial days.
+              Automatically applies to newly registered users across any meal category for their initial days.
             </p>
 
             {/* Inputs */}
@@ -580,10 +580,10 @@ export default function DiscountSettingsScreen() {
             <p className="text-xs font-semibold leading-snug">
               {settings.new_user_discount_enabled ? (
                 <>
-                  New students get <strong className="text-purple-950 font-black">{settings.new_user_discount_percentage}% OFF</strong> on <strong className="text-purple-950">ANY meal</strong> for their first <strong className="text-purple-950 font-black">{settings.new_user_discount_days} days</strong>.
+                  New users get <strong className="text-purple-950 font-black">{settings.new_user_discount_percentage}% OFF</strong> on <strong className="text-purple-950">ANY meal</strong> for their first <strong className="text-purple-950 font-black">{settings.new_user_discount_days} days</strong>.
                 </>
               ) : (
-                'Welcome Deal is currently turned off. New students will pay normal prices or early-bird rates.'
+                'Welcome Deal is currently turned off. New users will pay normal prices or early-bird rates.'
               )}
             </p>
           </div>
